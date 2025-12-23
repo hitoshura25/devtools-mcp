@@ -1,3 +1,5 @@
+.DS_Store
+
 # Logs
 logs
 *.log
@@ -137,3 +139,13 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Turbo cache
+.turbo/
+
+# macOS
+.DS_Store
+
+# Test keystores (generated during integration tests)
+**/__tests__/**/test-keystores/
+*.keystore

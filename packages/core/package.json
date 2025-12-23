@@ -1,0 +1,35 @@
+{
+  "name": "@hitoshura25/core",
+  "version": "0.1.0",
+  "description": "Shared utilities for devtools MCP servers",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./executor": "./dist/executor.js",
+    "./discovery": "./dist/discovery.js",
+    "./results": "./dist/results.js",
+    "./errors": "./dist/errors.js",
+    "./progress": "./dist/progress.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run '**/*.integration.test.ts' --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {}
+}

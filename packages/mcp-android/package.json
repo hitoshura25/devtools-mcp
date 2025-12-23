@@ -1,0 +1,52 @@
+{
+  "name": "@hitoshura25/mcp-android",
+  "version": "0.1.0",
+  "description": "MCP server for Android development quality gates",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "mcp-android": "./dist/server.js",
+    "mcp-android-cli": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && pnpm copy-scripts",
+    "copy-scripts": "mkdir -p dist/scripts && cp src/scripts/*.sh dist/scripts/ && chmod +x dist/scripts/*.sh",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run src/tools/__tests__/integration",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@hitoshura25/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "eslint": "^8.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "android",
+    "quality-gates",
+    "gradle",
+    "ci-cd",
+    "devtools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hitoshura25/devtools-mcp"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
