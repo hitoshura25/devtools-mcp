@@ -45,6 +45,7 @@ export async function validateReleaseBuild(
   const buildType = params.build_type || 'release';
 
   // 1. Verify project structure
+  console.log(`[validateReleaseBuild] Detecting Android project at ${projectPath}...`);
   const projectInfo = await detectAndroidProject(projectPath);
   if (!projectInfo) {
     return {
@@ -61,23 +62,47 @@ export async function validateReleaseBuild(
     };
   }
   steps.push('project_detected');
+  console.log(`[validateReleaseBuild] Project detected, starting ${buildType} build...`);
 
   // 2. Run gradle build (CANNOT BE SKIPPED)
-  const buildCmd = `./gradlew assemble${capitalize(buildType)}`;
+  const buildCmd = `./gradlew assemble${capitalize(buildType)} --console=plain --no-daemon`;
+  console.log(`[validateReleaseBuild] Running: ${buildCmd}`);
+  const gradleStart = Date.now();
   const buildResult = await execCommand(buildCmd, {
     cwd: projectPath,
     timeout: 300000, // 5 minutes
   });
+  console.log(`[validateReleaseBuild] Gradle build completed in ${Date.now() - gradleStart}ms`);
+
+  // Log Gradle output for debugging (especially useful on CI)
+  if (buildResult.stdout) {
+    console.log('[validateReleaseBuild] Gradle stdout:');
+    console.log(buildResult.stdout);
+  }
+  if (buildResult.stderr) {
+    console.log('[validateReleaseBuild] Gradle stderr:');
+    console.log(buildResult.stderr);
+  }
 
   if (buildResult.exitCode !== 0) {
     const parsed = parseGradleError(buildResult.stderr);
+
+    // Log timeout info if build timed out
+    if (buildResult.timedOut) {
+      console.error('[validateReleaseBuild] ⚠️  Gradle build TIMED OUT after 5 minutes');
+      console.error('[validateReleaseBuild] Last stdout:', buildResult.stdout.slice(-1000));
+      console.error('[validateReleaseBuild] Last stderr:', buildResult.stderr.slice(-1000));
+    }
+
     return {
       success: false,
       error: {
-        code: 'BUILD_FAILED',
-        message: parsed.message,
+        code: buildResult.timedOut ? 'BUILD_TIMEOUT' : 'BUILD_FAILED',
+        message: buildResult.timedOut ? 'Gradle build timed out after 5 minutes' : parsed.message,
         details: buildResult.stderr.slice(-2000),
-        suggestions: parsed.suggestions,
+        suggestions: buildResult.timedOut
+          ? ['Check Gradle daemon logs', 'Verify Android SDK is properly installed', 'Check network connectivity for dependency downloads']
+          : parsed.suggestions,
         recoverable: true,
       },
       duration_ms: Date.now() - startTime,

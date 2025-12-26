@@ -20,14 +20,20 @@ describeIntegration('validateReleaseBuild - Integration Tests', () => {
     }
 
     // Generate test keystore for signing
+    console.log('🔑 Generating test keystore...');
+    const start = Date.now();
     await generateTestKeystore(KEYSTORE_DIR);
+    console.log(`✅ Keystore generated in ${Date.now() - start}ms`);
   });
 
   it('should successfully build release APK with ProGuard', async () => {
+    console.log('🏗️  Starting release build...');
+    const buildStart = Date.now();
     const result = await validateReleaseBuild({
       project_path: FIXTURE_PATH,
       build_type: 'release',
     });
+    console.log(`✅ Build completed in ${Date.now() - buildStart}ms`);
 
     expect(result.success).toBe(true);
     expect(result.data.apk_path).toBeDefined();
@@ -45,13 +51,16 @@ describeIntegration('validateReleaseBuild - Integration Tests', () => {
     if (result.data?.mapping_path) {
       expect(existsSync(result.data.mapping_path)).toBe(true);
     }
-  }, 120000); // 2 minute timeout for actual build
+  }, 300000); // 5 minute timeout to allow for dependency downloads on CI
 
   it('should build debug APK without ProGuard', async () => {
+    console.log('🏗️  Starting debug build...');
+    const buildStart = Date.now();
     const result = await validateReleaseBuild({
       project_path: FIXTURE_PATH,
       build_type: 'debug',
     });
+    console.log(`✅ Debug build completed in ${Date.now() - buildStart}ms`);
 
     expect(result.success).toBe(true);
     expect(result.data.apk_path).toBeDefined();
@@ -60,7 +69,7 @@ describeIntegration('validateReleaseBuild - Integration Tests', () => {
     // Debug builds typically don't have ProGuard enabled
     // (though mapping path might exist but be empty)
     expect(existsSync(result.data.apk_path!)).toBe(true);
-  }, 120000);
+  }, 300000);
 
   it('should fail gracefully with invalid project path', async () => {
     const result = await validateReleaseBuild({
@@ -74,14 +83,17 @@ describeIntegration('validateReleaseBuild - Integration Tests', () => {
   });
 
   it('should handle clean build option', async () => {
+    console.log('🏗️  Starting clean build...');
+    const buildStart = Date.now();
     const result = await validateReleaseBuild({
       project_path: FIXTURE_PATH,
       build_type: 'release',
     });
+    console.log(`✅ Clean build completed in ${Date.now() - buildStart}ms`);
 
     expect(result.success).toBe(true);
     expect(result.data.apk_path).toBeDefined();
-  }, 120000);
+  }, 300000);
 });
 
 // Log skip reason if no SDK available

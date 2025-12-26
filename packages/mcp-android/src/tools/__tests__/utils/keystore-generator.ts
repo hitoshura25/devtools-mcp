@@ -29,10 +29,12 @@ export async function generateTestKeystore(outputDir: string): Promise<KeystoreC
 
   // Skip generation if keystore already exists
   if (existsSync(keystorePath)) {
+    console.log(`[keystore-generator] Keystore already exists at ${keystorePath}`);
     return config;
   }
 
   // Generate keystore using keytool
+  console.log(`[keystore-generator] Generating keystore at ${keystorePath}...`);
   const keytoolCmd = [
     'keytool',
     '-genkeypair',
@@ -55,5 +57,6 @@ export async function generateTestKeystore(outputDir: string): Promise<KeystoreC
     throw new Error(`Failed to generate keystore: ${result.stderr}`);
   }
 
+  console.log(`[keystore-generator] Keystore generated successfully`);
   return config;
 }
