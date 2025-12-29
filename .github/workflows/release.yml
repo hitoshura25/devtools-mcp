@@ -19,7 +19,7 @@ jobs:
     # Enable OIDC for trusted publishing to npm
     permissions:
       id-token: write
-      contents: read
+      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,6 +90,7 @@ jobs:
           # - Existing packages where OIDC not yet configured
           # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
           NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Notify about OIDC setup
         if: steps.check-packages.outputs.has_new_packages == 'true' && steps.publish.outputs.published == 'true'

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +23,6 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@hitoshura25'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
