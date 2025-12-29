@@ -67,3 +67,36 @@ jobs:
         run: pnpm test:integration
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+
+  # Mode 1: Create Version Packages PR (only on main after tests pass)
+  version:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.ref_name == 'main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch all history so changesets can determine version bumps
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Release Pull Request
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
