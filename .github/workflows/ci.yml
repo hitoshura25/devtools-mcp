@@ -86,6 +86,7 @@ jobs:
           publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
           # Authentication handled by .npmrc (created above if package is new)
           # For existing packages, OIDC is used automatically
 
