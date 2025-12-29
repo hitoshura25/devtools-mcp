@@ -46,7 +46,7 @@ The release workflow automatically handles both new and existing packages:
 
 Set up the NPM token secret for bootstrapping new packages:
 
-1. Generate an automation token at: https://www.npmjs.com/settings/YOUR_USERNAME/tokens
+1. Generate an automation token at: https://www.npmjs.com/settings/hitoshura25/tokens
    - Choose **"Automation"** token type
    - Give it publish permissions
 2. Add to GitHub repository secrets:

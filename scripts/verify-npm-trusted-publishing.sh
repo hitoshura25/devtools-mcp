@@ -74,12 +74,16 @@ for PKG_DIR in "$PACKAGES_DIR"/*; do
             echo -e "  ${GREEN}✓ Public access configured${NC}"
         fi
 
-        # Check if package exists on npm
-        if npm view "$PKG_NAME" &> /dev/null; then
+        # Check if package exists on npm (with better error handling and timeout)
+        NPM_VIEW_OUTPUT=$(timeout 10 npm view "$PKG_NAME" version 2>&1)
+        NPM_VIEW_EXIT=$?
+
+        if [ $NPM_VIEW_EXIT -eq 0 ]; then
             echo -e "  ${GREEN}✓ Package exists on npm${NC}"
 
             # Check if package has provenance (indicates OIDC was used)
-            if npm view "$PKG_NAME" --json 2>/dev/null | jq -e '.provenance' &>/dev/null; then
+            PROVENANCE_CHECK=$(npm view "$PKG_NAME" --json 2>&1 | jq -e '.provenance' 2>&1)
+            if [ $? -eq 0 ]; then
                 echo -e "  ${GREEN}✓ Package has provenance (OIDC configured and working!)${NC}"
             else
                 echo -e "  ${YELLOW}⚠ No provenance detected${NC}"
@@ -90,11 +94,21 @@ for PKG_DIR in "$PACKAGES_DIR"/*; do
             NPM_URL="https://www.npmjs.com/package/$PKG_NAME/settings"
             echo -e "  ${YELLOW}⚙ Configure/verify trusted publisher at:${NC}"
             echo -e "     $NPM_URL"
-        else
+        elif echo "$NPM_VIEW_OUTPUT" | grep -q "404\|code E404"; then
             echo -e "  ${YELLOW}⚠ Package not on npm yet${NC}"
             echo -e "     Will use NPM_TOKEN for first publish automatically"
             echo -e "     After first publish, configure OIDC at:"
             echo -e "     https://www.npmjs.com/package/$PKG_NAME/settings"
+        elif [ $NPM_VIEW_EXIT -eq 124 ]; then
+            echo -e "  ${RED}✗ Timeout checking npm registry${NC}"
+            echo -e "     npm view command timed out after 10 seconds"
+            echo -e "     Check network connection or npm registry status"
+            HAS_ERROR=1
+        else
+            echo -e "  ${RED}✗ Error checking npm registry${NC}"
+            echo -e "     Error: $NPM_VIEW_OUTPUT"
+            echo -e "     Check network connection or npm registry status"
+            HAS_ERROR=1
         fi
 
         echo ""
