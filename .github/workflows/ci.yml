@@ -9,6 +9,9 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
 
@@ -16,10 +19,53 @@ jobs:
         with:
           version: 9
 
+      - name: Check package registry status
+        id: check-packages
+        run: |
+          echo "🔍 Checking package status on npm registry..."
+          echo ""
+
+          # Get all workspace packages
+          PACKAGES=$(pnpm list --recursive --depth -1 --json 2>/dev/null | jq -r '.[] | select(.private != true) | .name')
+
+          if [ -z "$PACKAGES" ]; then
+            echo "ℹ️  No public packages found"
+            echo "has_new_packages=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check each package on npm registry
+          HAS_NEW=false
+          while IFS= read -r PKG; do
+            if [ -n "$PKG" ]; then
+              echo "Checking $PKG..."
+              if npm view "$PKG" version &>/dev/null; then
+                echo "  ✓ Exists on npm (will use OIDC)"
+              else
+                echo "  ⚠️  NEW package (will use token for first publish)"
+                HAS_NEW=true
+              fi
+            fi
+          done <<< "$PACKAGES"
+
+          echo "has_new_packages=$HAS_NEW" >> $GITHUB_OUTPUT
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Configure npm authentication
+        run: |
+          if [ "${{ steps.check-packages.outputs.has_new_packages }}" == "true" ]; then
+            echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
+            #echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+          else
+            echo "📦 Package exists - will use OIDC trusted publishing"
+            #echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > $HOME/.npmrc
+          fi
+        env:
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -32,9 +78,45 @@ jobs:
 
       - name: Unit Tests
         run: pnpm test:unit
+      
+      - name: Publish to npm
+        id: publish
+        uses: changesets/action@v1
+        with:
+          publish: pnpm release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          # Authentication handled by .npmrc (created above if package is new)
+          # For existing packages, OIDC is used automatically
+
+      - name: Debug - Show generated .npmrc
+        if: always()
+        run: |
+          echo "=== Checking for .npmrc files ==="
+          echo "Home directory .npmrc:"
+          if [ -f "$HOME/.npmrc" ]; then
+            cat "$HOME/.npmrc" | sed 's/_authToken=.*/authToken=***REDACTED***/g'
+          else
+            echo "No .npmrc found in $HOME"
+          fi
+          echo ""
+          echo "Project .npmrc:"
+          if [ -f ".npmrc" ]; then
+            cat ".npmrc" | sed 's/_authToken=.*/authToken=***REDACTED***/g'
+          else
+            echo "No .npmrc found in project root"
+          fi
+          echo ""
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "NPM_TOKEN env var: SET (value length: ${#NPM_TOKEN})"
+          else
+            echo "NPM_TOKEN env var: NOT SET"
+          fi
 
   integration-tests:
     runs-on: ubuntu-latest
+    needs: [unit-tests]
 
     steps:
       - uses: actions/checkout@v4
