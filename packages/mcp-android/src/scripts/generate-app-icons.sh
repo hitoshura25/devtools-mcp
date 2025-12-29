@@ -130,9 +130,15 @@ if [ ! -f "$TMP_DIR/icon-meta.txt" ] || grep -q "ERROR" "$TMP_DIR/icon-meta.txt"
     exit 1
 fi
 
-# Source the metadata
-eval "$(cat "$TMP_DIR/icon-meta.txt")"
-ICON_BODY=$(cat "$TMP_DIR/icon-body.txt")
+# Parse the metadata safely (avoid eval of untrusted data)
+WIDTH=$(grep '^WIDTH=' "$TMP_DIR/icon-meta.txt" | cut -d'=' -f2)
+HEIGHT=$(grep '^HEIGHT=' "$TMP_DIR/icon-meta.txt" | cut -d'=' -f2)
+
+# Validate that WIDTH and HEIGHT are numeric
+if ! [[ "$WIDTH" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$HEIGHT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    printf "Error: Invalid width/height values from API\n"
+    exit 1
+fi
 
 printf "✓ Fetched icon (viewBox: %sx%s)\n\n" "$WIDTH" "$HEIGHT"
 
@@ -144,7 +150,10 @@ python3 << PYEOF > "$DRAWABLE_DIR/ic_launcher_foreground.xml"
 import re
 import sys
 
-icon_body = '''$ICON_BODY'''
+# Read icon body from file (avoid code injection via variable interpolation)
+with open('$TMP_DIR/icon-body.txt', 'r') as f:
+    icon_body = f.read()
+
 icon_width = float($WIDTH)
 icon_height = float($HEIGHT)
 user_scale = float($ICON_SCALE)
