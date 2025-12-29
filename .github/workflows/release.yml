@@ -16,6 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     # Only run if CI workflow succeeded
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Enable OIDC for trusted publishing to npm
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -35,10 +39,73 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Detect packages and check npm registry
+        id: check-packages
+        run: |
+          echo "🔍 Checking which packages will be published..."
+
+          # Get list of packages that will be published
+          CHANGESET_STATUS=$(pnpm changeset status --output=json 2>/dev/null || echo '{"releases":[]}')
+
+          # Extract package names
+          PACKAGES=$(echo "$CHANGESET_STATUS" | jq -r '.releases[]?.name // empty')
+
+          if [ -z "$PACKAGES" ]; then
+            echo "ℹ️  No packages to publish"
+            echo "needs_publish=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "needs_publish=true" >> $GITHUB_OUTPUT
+          echo ""
+
+          # Check each package on npm
+          NEW_PACKAGES=""
+          for PKG in $PACKAGES; do
+            echo "Checking $PKG..."
+            if npm view "$PKG" version &>/dev/null; then
+              echo "  ✓ $PKG exists on npm (will use OIDC if configured)"
+            else
+              echo "  ⚠️  $PKG is NEW (will use NPM_TOKEN for first publish)"
+              if [ -n "$NEW_PACKAGES" ]; then
+                NEW_PACKAGES="$NEW_PACKAGES $PKG"
+              else
+                NEW_PACKAGES="$PKG"
+              fi
+            fi
+          done
+
+          if [ -n "$NEW_PACKAGES" ]; then
+            echo ""
+            echo "new_packages=$NEW_PACKAGES" >> $GITHUB_OUTPUT
+            echo "has_new_packages=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_new_packages=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npm
+        if: steps.check-packages.outputs.needs_publish == 'true'
         uses: changesets/action@v1
         with:
           publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN provides fallback for:
+          # - New packages (first publish before OIDC can be configured)
+          # - Existing packages where OIDC not yet configured
+          # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
           NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Notify about OIDC setup
+        if: steps.check-packages.outputs.has_new_packages == 'true'
+        run: |
+          echo ""
+          echo "📦 New packages published! Configure OIDC trusted publishing:"
+          echo ""
+          for PKG in ${{ steps.check-packages.outputs.new_packages }}; do
+            echo "  $PKG"
+            echo "  → https://www.npmjs.com/package/$PKG/settings"
+          done
+          echo ""
+          echo "📖 See docs/NPM_TRUSTED_PUBLISHING_SETUP.md for instructions"
+          echo ""
