@@ -51,6 +51,30 @@ jobs:
           # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
           NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
+      - name: Debug - Show generated .npmrc
+        if: always()
+        run: |
+          echo "=== Checking for .npmrc files ==="
+          echo "Home directory .npmrc:"
+          if [ -f "$HOME/.npmrc" ]; then
+            cat "$HOME/.npmrc" | sed 's/_authToken=.*/authToken=***REDACTED***/g'
+          else
+            echo "No .npmrc found in $HOME"
+          fi
+          echo ""
+          echo "Project .npmrc:"
+          if [ -f ".npmrc" ]; then
+            cat ".npmrc" | sed 's/_authToken=.*/authToken=***REDACTED***/g'
+          else
+            echo "No .npmrc found in project root"
+          fi
+          echo ""
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "NPM_TOKEN env var: SET (value length: ${#NPM_TOKEN})"
+          else
+            echo "NPM_TOKEN env var: NOT SET"
+          fi
+
   integration-tests:
     runs-on: ubuntu-latest
 
