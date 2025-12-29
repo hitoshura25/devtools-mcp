@@ -45,10 +45,9 @@ jobs:
           publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN provides fallback for:
-          # - New packages (first publish before OIDC can be configured)
-          # - Existing packages where OIDC not yet configured
-          # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
+          # Both tokens needed due to setup-node creating .npmrc with NODE_AUTH_TOKEN
+          # and changesets/action expecting NPM_TOKEN
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Debug - Show generated .npmrc
