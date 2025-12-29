@@ -47,6 +47,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@hitoshura25'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -67,6 +69,19 @@ jobs:
         run: pnpm test:integration
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+
+      - name: Publish to npm
+        id: publish
+        uses: changesets/action@v1
+        with:
+          publish: pnpm release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN provides fallback for:
+          # - New packages (first publish before OIDC can be configured)
+          # - Existing packages where OIDC not yet configured
+          # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
   # Mode 1: Create Version Packages PR (only on main after tests pass)
   version:
