@@ -25,28 +25,14 @@ if [ "$CHANGESET_FILES" -gt 0 ]; then
   exit 0
 fi
 
-# No changeset - prompt to create one
+# No changeset found - fail with helpful message
 echo ""
-echo "📝 No changeset found. Let's create one now!"
+echo "❌ No changeset found!"
 echo ""
-
-# Run changeset interactively
-pnpm changeset
-
-# Check if changeset was created
-CHANGESET_FILES=$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
-
-if [ "$CHANGESET_FILES" -gt 0 ]; then
-  # Auto-add the changeset file
-  git add .changeset/*.md
-  echo ""
-  echo "✅ Changeset created and staged!"
-  exit 0
-else
-  echo ""
-  echo "❌ No changeset was created. Commit aborted."
-  echo ""
-  echo "If this change doesn't need a release, run:"
-  echo "  pnpm changeset --empty"
-  exit 1
-fi
+echo "Please create a changeset before committing:"
+echo "  pnpm changeset"
+echo ""
+echo "Or create an empty changeset if this change doesn't need a release:"
+echo "  pnpm changeset --empty"
+echo ""
+exit 1
