@@ -19,28 +19,14 @@ jobs:
     # Enable OIDC for trusted publishing to npm
     permissions:
       id-token: write
-      contents: read
+      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
         with:
           # Checkout the commit from the completed CI workflow
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
+      - uses: pnpm/action-setup@v4
 
       - name: Check package registry status
         id: check-packages
@@ -78,6 +64,26 @@ jobs:
             echo "has_new_packages=false" >> $GITHUB_OUTPUT
           fi
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure npm authentication
+        if: steps.check-packages.outputs.has_new_packages == 'true'
+        run: |
+          echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+        env:
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
       - name: Publish to npm
         id: publish
         uses: changesets/action@v1
@@ -85,11 +91,8 @@ jobs:
           publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN provides fallback for:
-          # - New packages (first publish before OIDC can be configured)
-          # - Existing packages where OIDC not yet configured
-          # npm CLI will try OIDC first, then fall back to NPM_TOKEN if needed
-          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          # Authentication handled by .npmrc (created above if package is new)
+          # For existing packages, OIDC is used automatically
 
       - name: Notify about OIDC setup
         if: steps.check-packages.outputs.has_new_packages == 'true' && steps.publish.outputs.published == 'true'
