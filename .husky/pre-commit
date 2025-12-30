@@ -6,12 +6,13 @@ echo "🔍 Checking for changesets..."
 # Get list of staged files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
 
-# Check if any source files are being committed
-SOURCE_FILES=$(echo "$STAGED_FILES" | grep -E '(packages/.*/src/|\.ts$|\.tsx$)' || true)
+# Check if any meaningful files are being committed
+# Skip only: changeset files themselves and documentation
+MEANINGFUL_FILES=$(echo "$STAGED_FILES" | grep -vE '^(\.changeset/.*\.md$|docs/|README\.md$)' || true)
 
-# Skip check if no source files or on main branch
+# Skip check if no meaningful files or on main branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ -z "$SOURCE_FILES" ] || [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
+if [ -z "$MEANINGFUL_FILES" ] || [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
   echo "✅ Skipping changeset check"
   exit 0
 fi
