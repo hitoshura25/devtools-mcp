@@ -68,6 +68,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Configure npm authentication
         if: steps.check-packages.outputs.has_new_packages == 'true'
