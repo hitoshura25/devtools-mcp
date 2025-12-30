@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+set -eu
+
+# Changeset enforcement hook
+echo "🔍 Checking for changesets..."
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+# Check if any meaningful files are being committed
+# Skip only: changeset files themselves, docs directory, and root README
+MEANINGFUL_FILES=$(echo "$STAGED_FILES" | grep -vE '^(\.changeset/.*\.md$|docs/|^README\.md$)' || true)
+
+# Skip check if no meaningful files or on main branch
+# Note: main/master skip is intentional - only Version Packages PR merges commit to main,
+# and those commits are from the changesets bot (already have changesets from feature branches)
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ -z "$MEANINGFUL_FILES" ] || [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
+  echo "✅ Skipping changeset check"
+  exit 0
+fi
+
+# Check for changeset files (excluding README)
+CHANGESET_FILES=$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l | xargs)
+
+if [ "$CHANGESET_FILES" -gt 0 ]; then
+  echo "✅ Changeset found!"
+  exit 0
+fi
+
+# No changeset found - fail with helpful message
+echo ""
+echo "❌ No changeset found!"
+echo ""
+echo "Please create a changeset before committing:"
+echo "  pnpm changeset"
+echo ""
+echo "Or create an empty changeset if this change doesn't need a release:"
+echo "  pnpm changeset --empty"
+echo ""
+exit 1
