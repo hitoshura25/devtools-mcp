@@ -11,7 +11,7 @@
     "lint": "turbo run lint",
     "clean": "turbo run clean",
     "dev": "turbo run dev",
-    "release": "changeset publish"
+    "release": "pnpm publish -r"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",

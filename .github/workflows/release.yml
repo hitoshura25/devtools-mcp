@@ -88,7 +88,7 @@ jobs:
         id: publish
         uses: changesets/action@v1
         with:
-          publish: pnpm publish
+          publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Authentication handled by .npmrc (created above if package is new)
