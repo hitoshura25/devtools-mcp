@@ -26,9 +26,7 @@ jobs:
           # Checkout the commit from the completed CI workflow
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
+      - uses: pnpm/action-setup@v4
 
       - name: Check package registry status
         id: check-packages
@@ -89,7 +87,7 @@ jobs:
         id: publish
         uses: changesets/action@v1
         with:
-          publish: pnpm release
+          publish: pnpm publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Authentication handled by .npmrc (created above if package is new)
