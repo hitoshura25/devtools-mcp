@@ -67,33 +67,113 @@ jobs:
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
 
-  # Mode 1: Create Version Packages PR (only on main after tests pass)
-  version:
+  # Create Version Packages PR or Publish to npm (only on main after tests pass)
+  release:
     runs-on: ubuntu-latest
     needs: [unit-tests, integration-tests]
     if: github.ref_name == 'main' && github.event_name == 'push'
     permissions:
       contents: write
       pull-requests: write
+      id-token: write  # For OIDC npm publishing
     steps:
       - uses: actions/checkout@v4
         with:
           # Fetch all history so changesets can determine version bumps
           fetch-depth: 0
+          # Explicitly checkout main branch (not detached HEAD)
+          ref: main
 
       - uses: pnpm/action-setup@v4
+
+      - name: Check package registry status
+        id: check-packages
+        run: |
+          echo "🔍 Checking package status on npm registry..."
+          echo ""
+
+          # Get all workspace packages
+          PACKAGES=$(pnpm list --recursive --depth -1 --json 2>/dev/null | jq -r '.[] | select(.private != true) | .name')
+
+          if [ -z "$PACKAGES" ]; then
+            echo "ℹ️  No public packages found"
+            exit 0
+          fi
+
+          # Check each package on npm registry
+          NEW_PACKAGES=""
+          while IFS= read -r PKG; do
+            if [ -n "$PKG" ]; then
+              echo "Checking $PKG..."
+              if npm view "$PKG" version &>/dev/null; then
+                echo "  ✓ Exists on npm (will use OIDC if configured)"
+              else
+                echo "  ⚠️  NEW package (will use NPM_TOKEN for first publish)"
+                NEW_PACKAGES="${NEW_PACKAGES}${PKG} "
+              fi
+            fi
+          done <<< "$PACKAGES"
+
+          if [ -n "$NEW_PACKAGES" ]; then
+            echo ""
+            echo "new_packages=${NEW_PACKAGES% }" >> $GITHUB_OUTPUT
+            echo "has_new_packages=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_new_packages=false" >> $GITHUB_OUTPUT
+          fi
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
 
+      - name: Configure npm authentication
+        if: steps.check-packages.outputs.has_new_packages == 'true'
+        run: |
+          echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+        env:
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create Release Pull Request
+      - name: Build
+        run: pnpm build
+
+      - name: Create Release PR or Publish to npm
+        id: changeset
         uses: changesets/action@v1
         with:
           version: pnpm changeset version
+          publish: pnpm release
+          commit: "Version Packages"
+          title: "Version Packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for Version Packages PR
+        if: steps.changeset.outputs.pullRequestNumber != ''
+        run: gh pr merge --auto --squash "${{ steps.changeset.outputs.pullRequestNumber }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify about OIDC setup
+        if: steps.check-packages.outputs.has_new_packages == 'true' && steps.changeset.outputs.published == 'true'
+        run: |
+          echo ""
+          echo "📦 New packages published! Configure OIDC trusted publishing:"
+          echo ""
+
+          # Read new packages into array safely
+          IFS=' ' read -ra PACKAGES <<< "${{ steps.check-packages.outputs.new_packages }}"
+          for PKG in "${PACKAGES[@]}"; do
+            if [ -n "$PKG" ]; then
+              echo "  $PKG"
+              echo "  → https://www.npmjs.com/package/$PKG/settings"
+            fi
+          done
+
+          echo ""
+          echo "📖 See docs/NPM_TRUSTED_PUBLISHING_SETUP.md for instructions"
+          echo ""
