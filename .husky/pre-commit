@@ -4,6 +4,12 @@ set -eu
 # Changeset enforcement hook
 echo "🔍 Checking for changesets..."
 
+# Skip in CI - changesets bot needs to commit without changesets
+if [ -n "${CI:-}" ]; then
+  echo "✅ Skipping changeset check (running in CI)"
+  exit 0
+fi
+
 # Get list of staged files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
 
