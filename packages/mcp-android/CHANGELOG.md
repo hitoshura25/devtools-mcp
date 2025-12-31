@@ -1,5 +1,12 @@
 # @hitoshura25/mcp-android
 
+## 0.1.4
+
+### Patch Changes
+
+- 1c80f6e: Updating workflow to use release bot
+- c40c489: Testing new workflow changes
+
 ## 0.1.3
 
 ### Patch Changes
