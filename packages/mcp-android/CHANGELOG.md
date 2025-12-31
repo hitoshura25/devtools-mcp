@@ -1,5 +1,11 @@
 # @hitoshura25/mcp-android
 
+## 0.1.4
+
+### Patch Changes
+
+- c40c489: Testing new workflow changes
+
 ## 0.1.3
 
 ### Patch Changes
