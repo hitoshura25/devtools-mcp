@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
 
     # Only run for Version Packages PRs from the changesets bot
+    # Note: Exact title match is intentional for security - we only auto-approve
+    # PRs with this exact title from this exact bot. This matches the title set
+    # in ci.yml (changesets/action@v1 default).
     if: |
       github.event.pull_request.user.login == 'changesets-publisher-bot[bot]' &&
       github.event.pull_request.title == 'Version Packages'
@@ -20,7 +23,6 @@ jobs:
       - name: Auto-approve as CODEOWNER
         run: |
           echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
-          gh pr review "$PR_URL" --approve --body "✅ Auto-approved Version Packages PR - CI passed and version bumps verified"
+          gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by CODEOWNER - automated version bump from changesets"
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.CODEOWNER_PAT }}
