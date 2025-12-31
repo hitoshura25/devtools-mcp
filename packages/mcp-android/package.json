@@ -1,6 +1,6 @@
 {
   "name": "@hitoshura25/mcp-android",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "MCP server for Android development quality gates",
   "type": "module",
   "main": "./dist/index.js",
