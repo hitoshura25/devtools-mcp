@@ -20,17 +20,104 @@ This project uses [Changesets](https://github.com/changesets/changesets) to mana
 
 ### How to Create Changesets
 
-**For changes that need a release:**
-```bash
-pnpm changeset
-# Follow the prompts to:
-# 1. Select which packages changed
-# 2. Choose version bump type (major/minor/patch)
-# 3. Write a summary of the changes
+**IMPORTANT:** Claude Code cannot run interactive commands. Always create changesets manually by writing markdown files.
+
+#### Manual Changeset Creation (Claude Code Method)
+
+**After making changes:**
+1. Review the changes you made
+2. Determine if they affect any packages
+3. Create a changeset file manually using the Write tool
+4. Proceed with commit
+
+#### Format for Package Changes
+
+Create a new file in `.changeset/` directory with a random name (e.g., `random-name-here.md`):
+
+```markdown
+---
+"@hitoshura25/mcp-android": patch
+---
+
+Brief description of the change for the changelog
 ```
 
-**For changes that don't need a release** (docs, tooling, workflows):
+**File format details:**
+- **Filename:** Any random name like `happy-cats-jump.md` (avoid conflicts with existing files)
+- **Frontmatter:** YAML block listing affected packages and bump type
+  - `patch` - Bug fixes (0.1.2 → 0.1.3)
+  - `minor` - New features (0.1.0 → 0.2.0)
+  - `major` - Breaking changes (1.0.0 → 2.0.0)
+- **Description:** Summary for the CHANGELOG
+
+**Example changeset for multiple packages:**
+```markdown
+---
+"@hitoshura25/mcp-android": minor
+"@hitoshura25/core": patch
+---
+
+Add new icon generation feature and fix core utility bug
+```
+
+#### Format for Tooling/Infrastructure Changes
+
+For changes that don't need a release (tooling, workflows, docs), create an **empty changeset**:
+
+```markdown
+---
+---
+
+Description of the tooling/infrastructure change (no package versions listed)
+```
+
+#### Complete Example
+
+**Scenario:** Fixed a bug in `packages/mcp-android/src/tools/icon.ts`
+
+**Step 1:** Create `.changeset/fix-icon-validation.md`:
+```markdown
+---
+"@hitoshura25/mcp-android": patch
+---
+
+Fix icon generation validation to properly handle edge cases
+```
+
+**Step 2:** Commit:
 ```bash
+git add .
+git commit -m "Fix icon generation validation"
+```
+
+#### Quick Reference
+
+**Package changes:**
+```markdown
+# Create .changeset/some-random-name.md using Write tool
+---
+"@hitoshura25/mcp-android": patch
+---
+Description here
+```
+
+**Tooling/workflow changes:**
+```markdown
+# Create .changeset/some-random-name.md using Write tool
+---
+---
+Description here
+```
+
+#### Reference: Normal Interactive Method
+
+For reference, developers normally use the interactive CLI (which Claude Code cannot use):
+```bash
+# For package changes
+pnpm changeset
+# Prompts to select packages, choose version bump, write summary
+
+# For tooling/infrastructure changes
 pnpm changeset --empty
 ```
 
@@ -38,7 +125,8 @@ pnpm changeset --empty
 
 The pre-commit hook will:
 - ✅ **Allow commits** if a changeset exists
-- ✅ **Skip check** for documentation-only changes (README.md, docs/)
+- ✅ **Skip check** in CI (GitHub Actions)
+- ✅ **Skip check** for documentation-only changes (root README.md, docs/)
 - ✅ **Skip check** on main/master branch
 - ❌ **Block commits** if meaningful files changed but no changeset found
 
@@ -51,27 +139,6 @@ Please create a changeset before committing:
 
 Or create an empty changeset if this change doesn't need a release:
   pnpm changeset --empty
-```
-
-### Workflow for Claude Code
-
-**After making changes:**
-1. Review the changes you made
-2. Determine if they affect any packages
-3. Run `pnpm changeset` (or `pnpm changeset --empty`)
-4. Proceed with commit
-
-**Example:**
-```bash
-# After modifying packages/mcp-android/src/tools/icon.ts
-pnpm changeset
-# Select: @hitoshura25/mcp-android
-# Type: patch (bug fix) or minor (new feature)
-# Summary: "Add icon generation validation"
-
-# Now commit
-git add .
-git commit -m "Add icon generation validation"
 ```
 
 ---
@@ -90,18 +157,18 @@ This is a monorepo using:
   - `packages/mcp-android/` - Android development MCP server
   - `packages/core/` (future) - Shared utilities
 - `.github/workflows/` - CI/CD workflows
-  - `ci.yml` - Tests, builds, creates "Version Packages" PR
-  - `release.yml` - Publishes to npm after CI passes
+  - `ci.yml` - Tests, builds, creates "Version Packages" PR, and publishes to npm
 - `.changeset/` - Changeset files
 - `scripts/` - Build and verification scripts
 
 ### Publishing Workflow
 
-1. Create changeset on feature branch: `pnpm changeset`
+1. Create changeset on feature branch (manually create `.changeset/*.md` file)
 2. Merge PR to main
 3. CI creates "Version Packages" PR automatically
-4. Review and merge Version Packages PR
-5. Release workflow publishes to npm automatically
+4. Auto-merge enabled on Version Packages PR
+5. Version Packages PR auto-merges when CI passes
+6. CI publishes packages to npm automatically
 
 ---
 
