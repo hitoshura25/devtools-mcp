@@ -20,54 +20,17 @@ This project uses [Changesets](https://github.com/changesets/changesets) to mana
 
 ### How to Create Changesets
 
-**For changes that need a release:**
-```bash
-pnpm changeset
-# Follow the prompts to:
-# 1. Select which packages changed
-# 2. Choose version bump type (major/minor/patch)
-# 3. Write a summary of the changes
-```
+**IMPORTANT:** Claude Code cannot run interactive commands. Always create changesets manually by writing markdown files.
 
-**For changes that don't need a release** (docs, tooling, workflows):
-```bash
-pnpm changeset --empty
-```
-
-### Pre-commit Hook Behavior
-
-The pre-commit hook will:
-- ✅ **Allow commits** if a changeset exists
-- ✅ **Skip check** for documentation-only changes (README.md, docs/)
-- ✅ **Skip check** on main/master branch
-- ❌ **Block commits** if meaningful files changed but no changeset found
-
-If blocked, you'll see:
-```
-❌ No changeset found!
-
-Please create a changeset before committing:
-  pnpm changeset
-
-Or create an empty changeset if this change doesn't need a release:
-  pnpm changeset --empty
-```
-
-### Workflow for Claude Code
-
-**IMPORTANT:** Claude Code cannot run interactive commands, so changesets must be created manually by writing markdown files.
-
-#### Manual Changeset Creation
+#### Manual Changeset Creation (Claude Code Method)
 
 **After making changes:**
 1. Review the changes you made
 2. Determine if they affect any packages
-3. Create a changeset file manually (see below)
+3. Create a changeset file manually using the Write tool
 4. Proceed with commit
 
-#### Creating Changeset Files Manually
-
-**For changes that need a release:**
+#### Format for Package Changes
 
 Create a new file in `.changeset/` directory with a random name (e.g., `random-name-here.md`):
 
@@ -79,7 +42,7 @@ Create a new file in `.changeset/` directory with a random name (e.g., `random-n
 Brief description of the change for the changelog
 ```
 
-**Changeset file format:**
+**File format details:**
 - **Filename:** Any random name like `happy-cats-jump.md` (avoid conflicts with existing files)
 - **Frontmatter:** YAML block listing affected packages and bump type
   - `patch` - Bug fixes (0.1.2 → 0.1.3)
@@ -97,9 +60,9 @@ Brief description of the change for the changelog
 Add new icon generation feature and fix core utility bug
 ```
 
-**For changes that don't need a release** (tooling, workflows, docs):
+#### Format for Tooling/Infrastructure Changes
 
-Create an **empty changeset**:
+For changes that don't need a release (tooling, workflows, docs), create an **empty changeset**:
 
 ```markdown
 ---
@@ -129,21 +92,53 @@ git commit -m "Fix icon generation validation"
 
 #### Quick Reference
 
-**Package changes → Create changeset with package version:**
-```bash
-# Use Write tool to create .changeset/some-random-name.md
+**Package changes:**
+```markdown
+# Create .changeset/some-random-name.md using Write tool
 ---
 "@hitoshura25/mcp-android": patch
 ---
 Description here
 ```
 
-**Tooling/workflow changes → Create empty changeset:**
-```bash
-# Use Write tool to create .changeset/some-random-name.md
+**Tooling/workflow changes:**
+```markdown
+# Create .changeset/some-random-name.md using Write tool
 ---
 ---
 Description here
+```
+
+#### Reference: Normal Interactive Method
+
+For reference, developers normally use the interactive CLI (which Claude Code cannot use):
+```bash
+# For package changes
+pnpm changeset
+# Prompts to select packages, choose version bump, write summary
+
+# For tooling/infrastructure changes
+pnpm changeset --empty
+```
+
+### Pre-commit Hook Behavior
+
+The pre-commit hook will:
+- ✅ **Allow commits** if a changeset exists
+- ✅ **Skip check** in CI (GitHub Actions)
+- ✅ **Skip check** for documentation-only changes (root README.md, docs/)
+- ✅ **Skip check** on main/master branch
+- ❌ **Block commits** if meaningful files changed but no changeset found
+
+If blocked, you'll see:
+```
+❌ No changeset found!
+
+Please create a changeset before committing:
+  pnpm changeset
+
+Or create an empty changeset if this change doesn't need a release:
+  pnpm changeset --empty
 ```
 
 ---
