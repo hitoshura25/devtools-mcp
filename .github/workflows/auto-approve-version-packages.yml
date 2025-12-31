@@ -20,6 +20,8 @@ jobs:
       pull-requests: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Auto-approve as CODEOWNER
         run: |
           echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
