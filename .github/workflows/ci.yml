@@ -86,6 +86,13 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
+      - name: Generate token from GitHub App
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Check package registry status
         id: check-packages
         run: |
@@ -150,13 +157,13 @@ jobs:
           commit: "Version Packages"
           title: "Version Packages"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 
       - name: Enable auto-merge for Version Packages PR
         if: steps.changeset.outputs.pullRequestNumber != ''
         run: gh pr merge --auto --squash "${{ steps.changeset.outputs.pullRequestNumber }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
       - name: Notify about OIDC setup
         if: steps.check-packages.outputs.has_new_packages == 'true' && steps.changeset.outputs.published == 'true'
