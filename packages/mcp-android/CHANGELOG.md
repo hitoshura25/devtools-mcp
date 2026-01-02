@@ -1,5 +1,11 @@
 # @hitoshura25/mcp-android
 
+## 0.1.5
+
+### Patch Changes
+
+- 31c398a: Triggering a new version bump
+
 ## 0.1.4
 
 ### Patch Changes
