@@ -158,6 +158,7 @@ jobs:
           title: "Version Packages"
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Enable auto-merge for Version Packages PR
         if: steps.changeset.outputs.pullRequestNumber != ''
