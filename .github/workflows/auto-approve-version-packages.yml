@@ -35,3 +35,10 @@ jobs:
           gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by changesets-reviewers-bot - automated version bump from changesets"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Auto-approve as CODEOWNER
+        run: |
+          echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
+          gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by CODEOWNER - automated version bump from changesets"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_PR_READ_WRITE }}
