@@ -29,16 +29,11 @@ jobs:
           app-id: ${{ secrets.REVIEWER_BOT_APP_ID }}
           private-key: ${{ secrets.REVIEWER_BOT_PRIVATE_KEY }}
 
+      # This approval doesn't really matter since it doesn't seem to count for PR approval count, and I have the branch rule set to require a CODEOWNER approval. 
+      # But it's just here to demonstrate how to use the GitHub App token to approve a PR.
       - name: Use GitHub app as one approval
         run: |
           echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
           gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by changesets-reviewers-bot - automated version bump from changesets"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-
-      - name: Auto-approve as CODEOWNER
-        run: |
-          echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
-          gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by CODEOWNER - automated version bump from changesets"
-        env:
-          GH_TOKEN: ${{ secrets.PAT_PR_READ_WRITE }}
