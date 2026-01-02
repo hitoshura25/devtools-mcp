@@ -11,7 +11,7 @@
     "lint": "turbo run lint",
     "clean": "turbo run clean",
     "dev": "turbo run dev",
-    "release": "pnpm publish -r",
+    "release": "pnpm publish -r --provenance",
     "prepare": "husky"
   },
   "devDependencies": {
