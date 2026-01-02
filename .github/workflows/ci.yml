@@ -71,7 +71,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [unit-tests, integration-tests]
-    if: github.ref_name == 'main' && github.event_name == 'push'
     permissions:
       contents: write
       pull-requests: write
@@ -133,6 +132,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Configure npm authentication
         if: steps.check-packages.outputs.has_new_packages == 'true'
