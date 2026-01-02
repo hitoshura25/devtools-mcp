@@ -26,12 +26,12 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          app-id: ${{ secrets.REVIEWER_BOT_APP_ID }}
+          private-key: ${{ secrets.REVIEWER_BOT_PRIVATE_KEY }}
 
       - name: Use GitHub app as one approval
         run: |
           echo "🤖 Auto-approving Version Packages PR #${{ github.event.pull_request.number }}"
-          gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by changesets-publisher-bot - automated version bump from changesets"
+          gh pr review "${{ github.event.pull_request.number }}" --approve --body "✅ Auto-approved by changesets-reviewers-bot - automated version bump from changesets"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
