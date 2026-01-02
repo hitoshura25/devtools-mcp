@@ -132,13 +132,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Configure npm authentication
         if: steps.check-packages.outputs.has_new_packages == 'true'
         run: |
           echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
-          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+            echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
         env:
           NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
@@ -158,7 +157,9 @@ jobs:
           title: "Version Packages"
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          # Empty NODE_AUTH_TOKEN enables OIDC for existing packages
+          # For new packages, npm uses .npmrc with NPM_PUBLISH_TOKEN instead
+          NODE_AUTH_TOKEN: ''
 
       - name: Enable auto-merge for Version Packages PR
         if: steps.changeset.outputs.pullRequestNumber != ''
