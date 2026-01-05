@@ -41,7 +41,7 @@ jobs:
         run: pnpm test:unit
 
       - name: Test publishing
-        run: pnpm publish -r --no-git-checks
+        run: pnpm publish -r --no-git-checks --access=public
 
   integration-tests:
     runs-on: ubuntu-latest
