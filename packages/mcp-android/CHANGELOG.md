@@ -1,5 +1,11 @@
 # @hitoshura25/mcp-android
 
+## 0.1.6
+
+### Patch Changes
+
+- 099ae7b: Fixing publishing workflow
+
 ## 0.1.5
 
 ### Patch Changes
