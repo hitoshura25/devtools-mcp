@@ -33,6 +33,9 @@ jobs:
 
       - name: Unit Tests
         run: pnpm test:unit
+
+      - name: Test Publishing
+        run: pnpm publish --dry-run -r --provenance
     
   integration-tests:
     runs-on: ubuntu-latest
