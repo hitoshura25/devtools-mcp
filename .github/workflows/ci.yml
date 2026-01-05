@@ -9,9 +9,6 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -44,7 +41,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Setup Java
@@ -131,22 +128,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Configure npm authentication
+        if: steps.check-packages.outputs.has_new_packages == 'true'
         run: |
-          if [ -z "${HAS_NEW_PACKAGES}" ] || [ "${HAS_NEW_PACKAGES}" != "true" ]; then
-            echo "🔐 Creating .npmrc with Github token for trusted publishing of package(s)"
-            echo "//registry.npmjs.org/:_authToken=${{ secrets.GITHUB_TOKEN }}" > $HOME/.npmrc
-          else
-            echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
-            echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
-          fi
-
+          echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
         env:
           NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
-          HAS_NEW_PACKAGES: ${{ steps.check-packages.outputs.has_new_packages }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -162,11 +153,6 @@ jobs:
           publish: pnpm release
           commit: "Version Packages"
           title: "Version Packages"
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-          # Enable provenance for OIDC publishing (existing packages)
-          # For new packages, .npmrc with NPM_PUBLISH_TOKEN takes precedence
-          NPM_CONFIG_PROVENANCE: true
 
       - name: Enable auto-merge for Version Packages PR
         if: steps.changeset.outputs.pullRequestNumber != ''
