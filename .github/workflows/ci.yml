@@ -21,6 +21,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          scope: '@hitoshura25'
           registry-url: 'https://registry.npmjs.org/'
 
       - name: Install dependencies
