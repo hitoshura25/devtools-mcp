@@ -42,6 +42,8 @@ jobs:
 
       - name: Test publishing
         run: pnpm publish -r --no-git-checks --access=public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   integration-tests:
     runs-on: ubuntu-latest
