@@ -33,7 +33,7 @@ jobs:
 
       - name: Unit Tests
         run: pnpm test:unit
-    
+
   integration-tests:
     runs-on: ubuntu-latest
 
@@ -135,12 +135,18 @@ jobs:
           cache: 'pnpm'
 
       - name: Configure npm authentication
-        if: steps.check-packages.outputs.has_new_packages == 'true'
         run: |
-          echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
-          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+          if [ -z "${HAS_NEW_PACKAGES}" ] || [ "${HAS_NEW_PACKAGES}" != "true" ]; then
+            echo "🔐 Creating .npmrc with Github token for trusted publishing of package(s)"
+            echo "//registry.npmjs.org/:_authToken=${{ secrets.GITHUB_TOKEN }}" > $HOME/.npmrc
+          else
+            echo "🔐 Creating .npmrc with NPM_PUBLISH_TOKEN for new package(s)"
+            echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > $HOME/.npmrc
+          fi
+
         env:
           NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          HAS_NEW_PACKAGES: ${{ steps.check-packages.outputs.has_new_packages }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
