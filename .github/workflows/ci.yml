@@ -9,8 +9,6 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Needed for changesets to push git tags
     steps:
       - uses: actions/checkout@v4
 
