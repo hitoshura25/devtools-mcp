@@ -35,7 +35,7 @@ jobs:
         run: pnpm test:unit
 
       - name: Test Publishing
-        run: pnpm publish --dry-run -r --provenance
+        run: pnpm publish --dry-run -r --provenance --no-git-checks
     
   integration-tests:
     runs-on: ubuntu-latest
