@@ -1,5 +1,12 @@
 # @hitoshura25/mcp-android
 
+## 0.1.7
+
+### Patch Changes
+
+- f57dddf: Still attempting to fix publishing
+- 3f95e42: Triggering a new release for publishing test
+
 ## 0.1.6
 
 ### Patch Changes
