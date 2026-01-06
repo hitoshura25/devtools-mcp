@@ -153,6 +153,8 @@ jobs:
           publish: pnpm release
           commit: "Version Packages"
           title: "Version Packages"
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 
       - name: Enable auto-merge for Version Packages PR
         if: steps.changeset.outputs.pullRequestNumber != ''
