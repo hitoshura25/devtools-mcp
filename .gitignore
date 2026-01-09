@@ -146,6 +146,11 @@ vite.config.ts.timestamp-*
 # macOS
 .DS_Store
 
-# Test keystores (generated during integration tests)
+# Test artifacts (generated during integration tests)
 **/__tests__/**/test-keystores/
+**/__tests__/**/test-specs/
+**/__tests__/**/test-output/
+**/__tests__/**/fixtures/
+**/test-specs/
 *.keystore
+ai-reviews*.json

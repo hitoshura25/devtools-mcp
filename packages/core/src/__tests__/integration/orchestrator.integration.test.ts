@@ -91,9 +91,12 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
   let specPath: string;
 
   beforeAll(async () => {
-    // Create test specs directory
+    // Create test artifacts directories
     if (!existsSync('test-specs')) {
       await mkdir('test-specs', { recursive: true });
+    }
+    if (!existsSync('src/__tests__/integration/test-output')) {
+      await mkdir('src/__tests__/integration/test-output', { recursive: true });
     }
 
     orchestrator = new ImplementOrchestrator(testLanguageConfig, reviewerRegistry);
@@ -266,7 +269,22 @@ Use standard theme switching with preference storage.
     expect(status2?.reviews.olmo?.suggestions).toBeInstanceOf(Array);
     expect(status2?.reviews.olmo?.concerns).toBeInstanceOf(Array);
 
+    // Save reviews to JSON file for analysis
+    const reviewsOutput = {
+      workflowId,
+      timestamp: new Date().toISOString(),
+      gemini: status2?.reviews.gemini,
+      olmo: status2?.reviews.olmo,
+    };
+    const outputPath = 'src/__tests__/integration/test-output/ai-reviews-dual.json';
+    await writeFile(
+      outputPath,
+      JSON.stringify(reviewsOutput, null, 2),
+      'utf-8'
+    );
+
     console.log('✅ Both AI reviews completed and stored successfully');
+    console.log(`📄 Reviews saved to: ${outputPath}`);
 
   }, 420000); // 7 minute timeout (Gemini ~1min + OLMo ~5min + overhead)
 
@@ -319,7 +337,21 @@ Add basic user authentication to the app.
     expect(status?.reviews.gemini).toBeDefined();
     expect(status?.reviews.olmo).toBeUndefined();
 
+    // Save review to JSON file for analysis
+    const reviewsOutput = {
+      workflowId,
+      timestamp: new Date().toISOString(),
+      gemini: status?.reviews.gemini,
+    };
+    const outputPath = 'src/__tests__/integration/test-output/ai-reviews-gemini-only.json';
+    await writeFile(
+      outputPath,
+      JSON.stringify(reviewsOutput, null, 2),
+      'utf-8'
+    );
+
     console.log('✅ Gemini-only workflow completed');
+    console.log(`📄 Review saved to: ${outputPath}`);
 
   }, 120000); // 2 minute timeout
 });
