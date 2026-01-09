@@ -38,6 +38,16 @@ import {
   iconResetWorkflow,
   iconGetStatus,
 } from './tools/icon/index.js';
+import {
+  implementStart,
+  ImplementStartInput,
+  implementStep,
+  ImplementStepInput,
+  implementStatus,
+  ImplementStatusInput,
+  implementAbort,
+  ImplementAbortInput,
+} from './tools/implement/index.js';
 
 const server = new Server(
   {
@@ -324,6 +334,81 @@ const tools: Tool[] = [
       properties: {},
     },
   },
+
+  // Implement workflow tools
+  {
+    name: 'implement_start',
+    description: 'Start a new feature implementation workflow with AI review',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+          description: 'Description of the feature to implement',
+        },
+        project_path: {
+          type: 'string',
+          description: 'Path to Android project root (default: ".")',
+          default: '.',
+        },
+        reviewers: {
+          type: 'array',
+          items: { enum: ['gemini', 'olmo'] },
+          description: 'AI reviewers to use (default: ["gemini"])',
+          default: ['gemini'],
+        },
+      },
+      required: ['description'],
+    },
+  },
+  {
+    name: 'implement_step',
+    description: 'Execute the next step in an implementation workflow',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: {
+          type: 'string',
+          description: 'The workflow ID from implement_start',
+        },
+        step_result: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            output: { type: 'string' },
+            files_created: { type: 'array', items: { type: 'string' } },
+            files_modified: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+      required: ['workflow_id'],
+    },
+  },
+  {
+    name: 'implement_status',
+    description: 'Get status of implementation workflows',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: {
+          type: 'string',
+          description: 'Specific workflow ID (omit to list all active)',
+        },
+      },
+    },
+  },
+  {
+    name: 'implement_abort',
+    description: 'Abort an implementation workflow',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      required: ['workflow_id'],
+    },
+  },
 ];
 
 // List tools handler
@@ -426,6 +511,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> =>
 
       case 'icon_get_status': {
         const result = await iconGetStatus();
+        return formatMcpResponse(result);
+      }
+
+      // Implement workflow tools
+      case 'implement_start': {
+        const result = await implementStart(args as unknown as ImplementStartInput);
+        return formatMcpResponse(result);
+      }
+
+      case 'implement_step': {
+        const result = await implementStep(args as unknown as ImplementStepInput);
+        return formatMcpResponse(result);
+      }
+
+      case 'implement_status': {
+        const result = await implementStatus(args as unknown as ImplementStatusInput);
+        return formatMcpResponse(result);
+      }
+
+      case 'implement_abort': {
+        const result = await implementAbort(args as unknown as ImplementAbortInput);
         return formatMcpResponse(result);
       }
 

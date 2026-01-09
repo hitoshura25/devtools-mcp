@@ -12,7 +12,9 @@
     "./discovery": "./dist/discovery.js",
     "./results": "./dist/results.js",
     "./errors": "./dist/errors.js",
-    "./progress": "./dist/progress.js"
+    "./progress": "./dist/progress.js",
+    "./workflows": "./dist/workflows/index.js",
+    "./reviewers": "./dist/reviewers/index.js"
   },
   "files": [
     "dist"
@@ -31,5 +33,7 @@
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "nanoid": "^5.0.0"
+  }
 }
