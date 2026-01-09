@@ -4,6 +4,7 @@
  */
 
 import { nanoid } from 'nanoid';
+import { readFile } from 'fs/promises';
 import { FileWorkflowStorage } from '../persistence.js';
 import { ImplementPhase } from './phases.js';
 import { generateSpecTemplate, getSpecFileName } from './spec-template.js';
@@ -148,7 +149,18 @@ export class ImplementOrchestrator {
 
     switch (phase) {
       case ImplementPhase.INITIALIZED:
-        // Spec should have been created
+        // Spec should have been created, read its content
+        if (!context.specPath) {
+          throw new Error('Spec path is not set');
+        }
+
+        try {
+          const specContent = await readFile(context.specPath, 'utf-8');
+          context.specContent = specContent;
+        } catch (error) {
+          throw new Error(`Failed to read spec file at ${context.specPath}: ${error}`);
+        }
+
         return {
           nextPhase: ImplementPhase.SPEC_CREATED,
           action: this.getGeminiReviewAction(context),

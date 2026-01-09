@@ -38,9 +38,11 @@ describe('GeminiReviewer', () => {
     });
 
     it('extracts JSON from mixed output', () => {
-      const output = `Some preamble text
-{"approved": true, "feedback": "Good", "suggestions": [], "concerns": []}
-Some trailing text`;
+      // Gemini CLI JSON wrapper format with response field
+      const output = JSON.stringify({
+        response: '{"approved": true, "feedback": "Good", "suggestions": [], "concerns": []}',
+        stats: {},
+      });
 
       const result = reviewer.parseReviewOutput(output);
       expect(result.approved).toBe(true);

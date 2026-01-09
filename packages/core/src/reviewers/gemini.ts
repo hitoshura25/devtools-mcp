@@ -20,9 +20,9 @@ export class GeminiReviewer implements ReviewerAdapter {
     try {
       const { stdout } = await execAsync('which gemini', { timeout: 5000 });
       if (stdout.trim()) {
-        // Local CLI found, verify it works
+        // Local CLI found, verify it works with a simple test
         try {
-          await execAsync('echo "test" | gemini', { timeout: 10000 });
+          await execAsync('gemini "test" --model gemini-2.5-flash-lite', { timeout: 15000 });
           this.useDocker = false;
           return { available: true };
         } catch {
@@ -69,14 +69,6 @@ export class GeminiReviewer implements ReviewerAdapter {
   }
 
   getReviewCommand(spec: string, _context: ReviewContext): string {
-    // Escape the spec content for shell
-    const escapedSpec = spec
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\$/g, '\\$')
-      .replace(/`/g, '\\`')
-      .replace(/\n/g, '\\n');
-
     const prompt = `You are reviewing an implementation specification. Analyze it for:
 1. Completeness - Are all requirements clearly defined?
 2. Feasibility - Is this technically achievable?
@@ -94,46 +86,70 @@ Respond in JSON format:
 }
 
 SPECIFICATION:
-${escapedSpec}`;
+${spec}`;
 
     if (this.useDocker) {
-      // Docker-based command
-      const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-      return `docker run --rm \\
+      // Docker-based command with heredoc to avoid escaping issues
+      return `docker run --rm -i \\
   -e GOOGLE_API_KEY="$GOOGLE_API_KEY" \\
   ${GEMINI_DOCKER_IMAGE} \\
-  -p "${escapedPrompt}" \\
-  --output-format json`;
+  --model gemini-2.5-flash-lite \\
+  -o json 2>/dev/null <<'GEMINI_PROMPT_EOF'
+${prompt}
+GEMINI_PROMPT_EOF`;
     } else {
-      // Local CLI command
-      return `echo "${prompt}" | gemini`;
+      // Local CLI command with heredoc to avoid escaping issues
+      // Redirect stderr to suppress non-fatal extension warnings
+      return `gemini --model gemini-2.5-flash-lite -o json 2>/dev/null <<'GEMINI_PROMPT_EOF'
+${prompt}
+GEMINI_PROMPT_EOF`;
     }
   }
 
   parseReviewOutput(output: string): ReviewResult {
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      // First, parse the Gemini CLI JSON wrapper
+      const cliOutput = JSON.parse(output);
+      const responseText = cliOutput.response || output;
+
+      // Try to parse the response as JSON (our review format)
+      try {
+        const reviewData = JSON.parse(responseText);
         return {
           reviewer: 'gemini',
           timestamp: new Date().toISOString(),
-          feedback: output,
+          feedback: reviewData.feedback || responseText,
+          suggestions: reviewData.suggestions || [],
+          concerns: reviewData.concerns || [],
+          approved: reviewData.approved ?? false,
+        };
+      } catch {
+        // Response is not JSON, try to find JSON within the text
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const reviewData = JSON.parse(jsonMatch[0]);
+          return {
+            reviewer: 'gemini',
+            timestamp: new Date().toISOString(),
+            feedback: reviewData.feedback || responseText,
+            suggestions: reviewData.suggestions || [],
+            concerns: reviewData.concerns || [],
+            approved: reviewData.approved ?? false,
+          };
+        }
+
+        // No JSON found, use text as feedback
+        return {
+          reviewer: 'gemini',
+          timestamp: new Date().toISOString(),
+          feedback: responseText,
           suggestions: [],
           concerns: [],
           approved: false,
         };
       }
-
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        reviewer: 'gemini',
-        timestamp: new Date().toISOString(),
-        feedback: parsed.feedback || output,
-        suggestions: parsed.suggestions || [],
-        concerns: parsed.concerns || [],
-        approved: parsed.approved ?? false,
-      };
     } catch {
+      // Failed to parse CLI output, treat as plain text
       return {
         reviewer: 'gemini',
         timestamp: new Date().toISOString(),
