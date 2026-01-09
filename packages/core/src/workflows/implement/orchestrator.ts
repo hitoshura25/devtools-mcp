@@ -167,6 +167,22 @@ export class ImplementOrchestrator {
         };
 
       case ImplementPhase.SPEC_CREATED:
+        // If stepResult has output, we're submitting Gemini review
+        if (stepResult?.output && this.reviewerRegistry) {
+          const adapter = this.reviewerRegistry.get('gemini');
+          context.reviews.gemini = adapter.parseReviewOutput(stepResult.output);
+
+          // Check if we need OLMo review next
+          const hasOlmo = context.reviewers.includes('olmo');
+          return {
+            nextPhase: hasOlmo
+              ? ImplementPhase.OLMO_REVIEW_PENDING
+              : ImplementPhase.SPEC_REFINED,
+            action: hasOlmo ? this.getOlmoReviewAction(context) : this.getRefineSpecAction(context),
+          };
+        }
+
+        // Otherwise, return Gemini review action
         return {
           nextPhase: ImplementPhase.GEMINI_REVIEW_PENDING,
           action: this.getGeminiReviewAction(context),

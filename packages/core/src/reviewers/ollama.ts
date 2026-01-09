@@ -9,7 +9,7 @@ import type { ReviewerAdapter, ReviewerAvailability, ReviewContext, ReviewResult
 const execAsync = promisify(exec);
 
 const OLLAMA_BASE_URL = 'http://localhost:11434';
-const OLMO_MODEL = 'olmo2';
+const OLMO_MODEL = 'olmo-3.1:32b-think';
 
 export class OllamaReviewer implements ReviewerAdapter {
   name = 'olmo' as const;
@@ -71,14 +71,6 @@ export class OllamaReviewer implements ReviewerAdapter {
   }
 
   getReviewCommand(spec: string, _context: ReviewContext): string {
-    // Escape for JSON
-    const escapedSpec = spec
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
-
     const prompt = `You are reviewing an implementation specification. Analyze it for:
 1. Completeness - Are all requirements clearly defined?
 2. Feasibility - Is this technically achievable?
@@ -96,23 +88,22 @@ Respond in JSON format:
 }
 
 SPECIFICATION:
-${escapedSpec}`;
+${spec}`;
 
-    const escapedPrompt = prompt
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
+    // Use heredoc to avoid shell escaping issues with backticks and special characters
+    // JSON.stringify handles proper JSON escaping of the prompt content
+    const jsonPayload = JSON.stringify({
+      model: this.model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+    });
 
-    // Use OpenAI-compatible API
+    // Use heredoc with curl -d @- to read JSON from stdin
     return `curl -s ${this.baseUrl}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${this.model}",
-    "messages": [{"role": "user", "content": "${escapedPrompt}"}],
-    "temperature": 0.3
-  }'`;
+  -d @- <<'OLLAMA_JSON_EOF'
+${jsonPayload}
+OLLAMA_JSON_EOF`;
   }
 
   parseReviewOutput(output: string): ReviewResult {

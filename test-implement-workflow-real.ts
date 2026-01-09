@@ -20,12 +20,14 @@ async function testRealWorkflow() {
   let specPath: string | undefined;
 
   try {
-    // Step 1: Start a new workflow
+    // Step 1: Start a new workflow with both reviewers
     console.log('📋 Step 1: Starting REAL implementation workflow...');
+    console.log('   Testing with: Gemini CLI + OLMo (via Ollama)');
+    console.log();
     const startResult = await implementStart({
       description: 'Add dark mode toggle to settings screen',
       project_path: '.',
-      reviewers: ['gemini'],
+      reviewers: ['gemini', 'olmo'],
     });
 
     if (!startResult.success) {
@@ -165,53 +167,119 @@ Use Android's AppCompatDelegate with SharedPreferences for persistence.
     console.log('   Next Action Type:', step1Result.data?.action?.type);
     console.log();
 
-    // Step 4: Call REAL Gemini CLI for review using the workflow action
-    console.log('🤖 Step 4: Calling REAL Gemini CLI for spec review...');
-    console.log('   (This may take 10-30 seconds...)');
-    console.log();
+    // Step 4: Execute AI reviews (workflow returns actions for each reviewer)
+    const reviews: Record<string, any> = {};
+    let currentAction = step1Result.data?.action;
 
-    const reviewCommand = step1Result.data?.action?.command;
-    if (!reviewCommand) {
-      throw new Error('No review command returned from workflow');
+    // Loop through review phases (Gemini, then OLMo)
+    let reviewIndex = 1;
+    while (currentAction?.type === 'shell' && currentAction?.command) {
+      console.log(`🤖 Step ${3 + reviewIndex}: Executing review command...`);
+      console.log(`   (Gemini: ~30s, OLMo 32B: ~3-5 minutes due to model size...)`);
+      console.log();
+
+      try {
+        const { stdout } = await execAsync(currentAction.command, {
+          timeout: 300000, // 5 minutes for large models like OLMo 32B
+          maxBuffer: 1024 * 1024 * 10,
+        });
+
+        console.log(`✅ Review response received!`);
+        console.log();
+
+        // Parse review
+        let reviewData: any;
+        let reviewerName = 'unknown';
+        try {
+          const cliOutput = JSON.parse(stdout);
+          const responseText = cliOutput.response || cliOutput.choices?.[0]?.message?.content || stdout;
+
+          // Determine reviewer from response format
+          if (cliOutput.response) {
+            reviewerName = 'gemini';
+          } else if (cliOutput.choices) {
+            reviewerName = 'olmo';
+          }
+
+          // Extract JSON from response
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            reviewData = JSON.parse(jsonMatch[0]);
+          } else {
+            reviewData = { feedback: responseText };
+          }
+        } catch {
+          reviewData = { feedback: stdout };
+        }
+
+        reviews[reviewerName] = reviewData;
+
+        // Display review
+        console.log('='.repeat(80));
+        console.log(`${reviewerName.toUpperCase()} REVIEW`);
+        console.log('='.repeat(80));
+        console.log();
+        console.log('Approved:', reviewData.approved ?? 'N/A');
+        console.log();
+        console.log('Feedback:');
+        console.log('-'.repeat(80));
+        console.log(reviewData.feedback || 'No feedback provided');
+        console.log('-'.repeat(80));
+        console.log();
+
+        if (reviewData.suggestions && reviewData.suggestions.length > 0) {
+          console.log('Suggestions:');
+          reviewData.suggestions.forEach((s: string, i: number) => {
+            console.log(`  ${i + 1}. ${s}`);
+          });
+          console.log();
+        }
+
+        if (reviewData.concerns && reviewData.concerns.length > 0) {
+          console.log('Concerns:');
+          reviewData.concerns.forEach((c: string, i: number) => {
+            console.log(`  ${i + 1}. ${c}`);
+          });
+          console.log();
+        }
+
+        if (reviewData.recommended_tests && reviewData.recommended_tests.length > 0) {
+          console.log('Recommended Tests:');
+          reviewData.recommended_tests.forEach((t: string, i: number) => {
+            console.log(`  ${i + 1}. ${t}`);
+          });
+          console.log();
+        }
+
+        console.log('='.repeat(80));
+        console.log();
+
+        // Submit review to workflow and get next action
+        console.log(`📊 Processing ${reviewerName} review feedback...`);
+        const stepResult = await implementStep({
+          workflow_id: workflowId,
+          step_result: {
+            success: true,
+            output: stdout,
+          },
+        });
+        console.log(`✅ ${reviewerName} review captured`);
+        console.log(`   Current phase: ${stepResult.data?.phase}`);
+        console.log();
+
+        // Get next action
+        currentAction = stepResult.data?.action;
+        reviewIndex++;
+
+      } catch (error) {
+        console.error(`❌ Review failed:`, error);
+        throw error;
+      }
     }
 
-    console.log('📝 Review Command:');
-    console.log('-'.repeat(80));
-    console.log(reviewCommand.substring(0, 200) + '...');
-    console.log('-'.repeat(80));
-    console.log();
-
-    let geminiOutput: string;
-    try {
-      const { stdout } = await execAsync(reviewCommand, {
-        timeout: 45000,
-        maxBuffer: 1024 * 1024 * 10,
-      });
-      geminiOutput = stdout;
-      console.log('✅ Gemini CLI response received!');
-      console.log();
-      console.log('📝 Review Output:');
-      console.log('-'.repeat(80));
-      console.log(geminiOutput.substring(0, 500) + (geminiOutput.length > 500 ? '...' : ''));
-      console.log('-'.repeat(80));
-      console.log();
-    } catch (error) {
-      console.error('❌ Gemini CLI call failed:', error);
-      throw error;
-    }
-
-    // Step 5: Submit review result
-    console.log('📊 Step 5: Processing review feedback...');
-    const step2Result = await implementStep({
-      workflow_id: workflowId,
-      step_result: {
-        success: true,
-        output: geminiOutput,
-      },
-    });
-
-    console.log('✅ Phase:', step2Result.data?.phase);
-    console.log('   Review captured and parsed');
+    // Save all reviews to file
+    await writeFile('ai-reviews.json', JSON.stringify(reviews, null, 2), 'utf-8');
+    console.log('💾 Reviews saved to: ai-reviews.json');
     console.log();
 
     // Step 6: Check workflow status
@@ -255,12 +323,14 @@ Use Android's AppCompatDelegate with SharedPreferences for persistence.
     console.log('Summary:');
     console.log('  ✅ Workflow created with real workflow ID');
     console.log('  ✅ Real spec file created on disk');
-    console.log('  ✅ Real Gemini CLI called for review');
-    console.log('  ✅ AI review feedback parsed and stored');
+    console.log('  ✅ Gemini CLI review completed');
+    console.log('  ✅ OLMo (Ollama) review completed');
+    console.log('  ✅ Both AI reviews parsed and stored');
+    console.log('  ✅ Reviews saved to ai-reviews.json');
     console.log('  ✅ Workflow state persisted to disk');
     console.log('  ✅ State machine transitions validated');
     console.log();
-    console.log('Note: Stopped before Android build commands (no Android project present)');
+    console.log('Note: Stopped after reviews (no Android project for build commands)');
     console.log();
 
   } catch (error) {
