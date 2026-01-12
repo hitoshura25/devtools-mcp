@@ -83,7 +83,7 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
     },
     testFilePatterns: ['**/*.test.ts'],
     sourceFilePatterns: ['**/*.ts'],
-    specsDir: 'test-specs/',
+    specsDir: 'src/__tests__/integration/test-output/test-specs/',
   };
 
   let orchestrator: ImplementOrchestrator;
@@ -91,12 +91,9 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
   let specPath: string;
 
   beforeAll(async () => {
-    // Create test artifacts directories
-    if (!existsSync('test-specs')) {
-      await mkdir('test-specs', { recursive: true });
-    }
-    if (!existsSync('src/__tests__/integration/test-output')) {
-      await mkdir('src/__tests__/integration/test-output', { recursive: true });
+    // Create test artifacts directories (all under test-output)
+    if (!existsSync('src/__tests__/integration/test-output/test-specs')) {
+      await mkdir('src/__tests__/integration/test-output/test-specs', { recursive: true });
     }
 
     orchestrator = new ImplementOrchestrator(testLanguageConfig, reviewerRegistry);
