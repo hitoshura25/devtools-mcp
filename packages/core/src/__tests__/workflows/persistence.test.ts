@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { FileWorkflowStorage } from '../../workflows/persistence.js';
+import { FileWorkflowStorage } from '@hitoshura25/core';
 import { rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ImplementPhase, canTransition } from '../../../workflows/implement/phases.js';
+import { ImplementPhase, canTransition } from '@hitoshura25/core';
 
 describe('ImplementWorkflow Phases', () => {
   describe('canTransition', () => {

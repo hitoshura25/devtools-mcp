@@ -8,6 +8,7 @@ import { readFile } from 'fs/promises';
 import { FileWorkflowStorage } from '../persistence.js';
 import { ImplementPhase } from './phases.js';
 import { generateSpecTemplate, getSpecFileName } from './spec-template.js';
+import type { ReviewerRegistry } from '../../reviewers/registry.js';
 import type {
   ImplementWorkflowContext,
   LanguageConfig,
@@ -36,9 +37,9 @@ export class ReviewerUnavailableError extends Error {
 export class ImplementOrchestrator {
   private storage: FileWorkflowStorage<ImplementWorkflowContext>;
   private languageConfig: LanguageConfig;
-  private reviewerRegistry: any; // Will be injected
+  private reviewerRegistry?: ReviewerRegistry;
 
-  constructor(languageConfig: LanguageConfig, reviewerRegistry?: any) {
+  constructor(languageConfig: LanguageConfig, reviewerRegistry?: ReviewerRegistry) {
     this.languageConfig = languageConfig;
     this.storage = new FileWorkflowStorage('implement');
     this.reviewerRegistry = reviewerRegistry;

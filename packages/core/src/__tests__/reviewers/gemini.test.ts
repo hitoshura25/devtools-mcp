@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GeminiReviewer } from '../../reviewers/gemini.js';
+import { GeminiReviewer } from '@hitoshura25/core';
 
 // Mock child_process exec
 const mockExec = vi.fn();
 vi.mock('child_process', () => ({
-  exec: (cmd: string, options: any, callback: any) => mockExec(cmd, options, callback),
+  exec: (cmd: string, options: unknown, callback: unknown) => mockExec(cmd, options, callback),
 }));
 
 describe('GeminiReviewer', () => {

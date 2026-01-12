@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OllamaReviewer } from '../../reviewers/ollama.js';
+import { OllamaReviewer } from '@hitoshura25/core';
 
 // Mock child_process exec
 const mockExec = vi.fn();
 vi.mock('child_process', () => ({
-  exec: (cmd: string, options: any, callback: any) => mockExec(cmd, options, callback),
+  exec: (cmd: string, options: unknown, callback: unknown) => mockExec(cmd, options, callback),
 }));
 
 describe('OllamaReviewer', () => {
@@ -73,7 +73,7 @@ describe('OllamaReviewer', () => {
 
       expect(command).toContain('curl');
       expect(command).toContain('localhost:11434');
-      expect(command).toContain('olmo2');
+      expect(command).toContain('olmo-3.1:32b-think');
     });
 
     it('uses custom base URL', () => {

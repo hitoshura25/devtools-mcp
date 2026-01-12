@@ -4,27 +4,24 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImplementOrchestrator } from '../../workflows/implement/orchestrator.js';
-import { reviewerRegistry } from '../../reviewers/registry.js';
+import { ImplementOrchestrator, reviewerRegistry } from '@hitoshura25/core';
+import type { LanguageConfig } from '@hitoshura25/core';
 import { writeFile, unlink, mkdir } from 'fs/promises';
-import { exec } from 'child_process';
+import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
-import type { LanguageConfig } from '../../workflows/implement/types.js';
 
 const execAsync = promisify(exec);
 
 // Check if Gemini is available (local CLI with cached credentials OR Docker with GOOGLE_API_KEY)
 let hasGemini = false;
 try {
-  const { execSync } = require('child_process');
   // Try local Gemini CLI first (uses cached credentials)
   execSync('gemini "test" --model gemini-2.5-flash-lite', { timeout: 15000, stdio: 'ignore' });
   hasGemini = true;
 } catch {
   // Local CLI failed, check if Docker + GOOGLE_API_KEY available
   try {
-    const { execSync } = require('child_process');
     execSync('docker info', { timeout: 5000, stdio: 'ignore' });
     hasGemini = !!process.env.GOOGLE_API_KEY; // Docker requires API key
   } catch {
@@ -35,7 +32,6 @@ try {
 // Check for Ollama synchronously
 let hasOllama = false;
 try {
-  const { execSync } = require('child_process');
   const output = execSync('curl -s http://localhost:11434/api/tags', { timeout: 5000, encoding: 'utf-8' });
   const tags = JSON.parse(output);
   hasOllama = tags.models?.some((m: { name: string }) => m.name.includes('olmo'));
@@ -108,7 +104,9 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
       try {
         const stateFile = `${process.env.HOME}/.devtools/workflows/implement/active/${workflowId}.json`;
         await unlink(stateFile).catch(() => {});
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   });
 
@@ -202,10 +200,11 @@ Use standard theme switching with preference storage.
 
     // Step 4: Execute Gemini review
     console.log('🤖 Executing Gemini review (may take 30-60 seconds)...');
-    const geminiCommand = step1.action?.command!;
+    const geminiCommand = step1.action?.command;
+    expect(geminiCommand).toBeDefined();
     expect(geminiCommand).toContain('gemini');
 
-    const { stdout: geminiOutput } = await execAsync(geminiCommand, {
+    const { stdout: geminiOutput } = await execAsync(geminiCommand as string, {
       timeout: 90000,
       maxBuffer: 1024 * 1024 * 10,
     });
@@ -229,10 +228,11 @@ Use standard theme switching with preference storage.
 
     // Step 6: Execute OLMo review
     console.log('🤖 Executing OLMo review (may take 3-5 minutes for 32B model)...');
-    const olmoCommand = step2.action?.command!;
+    const olmoCommand = step2.action?.command;
+    expect(olmoCommand).toBeDefined();
     expect(olmoCommand).toMatch(/ollama|localhost:11434/); // Matches Ollama API endpoint
 
-    const { stdout: olmoOutput } = await execAsync(olmoCommand, {
+    const { stdout: olmoOutput } = await execAsync(olmoCommand as string, {
       timeout: 300000, // 5 minutes for large model
       maxBuffer: 1024 * 1024 * 10,
     });
@@ -317,7 +317,9 @@ Add basic user authentication to the app.
 
     // Execute Gemini review
     console.log('🤖 Executing Gemini review...');
-    const { stdout } = await execAsync(step1.action?.command!, {
+    const command = step1.action?.command;
+    expect(command).toBeDefined();
+    const { stdout } = await execAsync(command as string, {
       timeout: 90000,
       maxBuffer: 1024 * 1024 * 10,
     });
