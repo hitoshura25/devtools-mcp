@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Reviewer configuration for devtools-mcp implement workflow",
+  "reviewers": ["gemini", "ollama"],
+  "backends": {
+    "gemini": {
+      "model": "gemini-2.5-flash-lite",
+      "useDocker": false
+    },
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "model": "olmo-3.1:32b-think"
+    },
+    "openrouter": {
+      "endpoint": "https://openrouter.ai/api/v1",
+      "model": "allenai/olmo-3.1-32b-think",
+      "temperature": 0.3
+    },
+    "github-models": {
+      "endpoint": "https://models.inference.ai.azure.com",
+      "model": "phi-4",
+      "temperature": 0.3
+    }
+  },
+  "_comments": {
+    "option_a": "OpenRouter everywhere (simplest): Set reviewers to ['gemini', 'openrouter']",
+    "option_b": "Free local + paid CI (recommended): Use ['gemini', 'ollama'] locally, override with REVIEWERS=gemini,openrouter in CI",
+    "option_c": "Maximum flexibility: Mix and match any combination of backends",
+    "costs": {
+      "ollama": "$0 (local compute only)",
+      "openrouter": "~$0.0004 per review (~$0.08/month for 200 reviews)",
+      "github-models": "~$0.0005 per review (~$1/month for 200 reviews)"
+    },
+    "ci_setup": "In CI, set REVIEWERS=gemini,openrouter and OPENROUTER_API_KEY environment variable"
+  }
+}

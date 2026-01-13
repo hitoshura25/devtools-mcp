@@ -52,6 +52,61 @@ pnpm lint
 pnpm clean
 ```
 
+## Reviewer Configuration
+
+The implementation workflow uses AI reviewers to validate specifications. You can configure which reviewers to use and run multiple reviewers simultaneously.
+
+### Quick Start (Default)
+
+The default configuration uses Gemini + Ollama for local development:
+
+```bash
+# Install Ollama and download OLMo model
+ollama pull olmo-3.1:32b-think
+ollama serve
+
+# Install Gemini CLI
+npm install -g @google/generative-ai-cli
+gemini auth
+```
+
+### Recommended Setup: Free Local + Paid CI
+
+For the best cost/benefit, use **Ollama** locally (free) and **OpenRouter** in CI (~$0.08/month):
+
+**Local Development (.devtools/reviewers.config.json):**
+```json
+{
+  "reviewers": ["gemini", "ollama"],
+  "backends": {
+    "gemini": {
+      "model": "gemini-2.5-flash-lite",
+      "useDocker": false
+    },
+    "ollama": {
+      "model": "olmo-3.1:32b-think"
+    }
+  }
+}
+```
+
+**CI Environment (override with env vars):**
+```bash
+export REVIEWERS=gemini,openrouter
+export OPENROUTER_API_KEY=your_key  # Get from https://openrouter.ai/keys
+export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
+```
+
+### Available Backends
+
+| Backend | Cost | Best For | Setup |
+|---------|------|----------|-------|
+| **Gemini** | Free | Local + CI | `npm install -g @google/generative-ai-cli` |
+| **Ollama** | Free | Local only | `ollama pull olmo-3.1:32b-think` |
+| **OpenRouter** | ~$0.08/mo | CI environments | Get API key from [openrouter.ai](https://openrouter.ai/keys) |
+
+See [docs/REVIEWERS.md](./docs/REVIEWERS.md) for detailed configuration options, cost comparisons, and troubleshooting.
+
 ## Architecture
 
 ### Core Principle: Reliability Through Code Execution

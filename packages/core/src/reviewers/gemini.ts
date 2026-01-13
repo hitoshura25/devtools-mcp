@@ -11,9 +11,20 @@ const execAsync = promisify(exec);
 
 const GEMINI_DOCKER_IMAGE = 'us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1';
 
+export interface GeminiReviewerOptions {
+  model?: string;
+  useDocker?: boolean;
+}
+
 export class GeminiReviewer implements ReviewerAdapter {
   name = 'gemini' as const;
-  private useDocker = false;
+  private useDocker: boolean;
+  private model: string;
+
+  constructor(options?: GeminiReviewerOptions) {
+    this.model = options?.model ?? 'gemini-2.5-flash-lite';
+    this.useDocker = options?.useDocker ?? false;
+  }
 
   async checkAvailability(): Promise<ReviewerAvailability> {
     // Check for local CLI first
@@ -22,7 +33,7 @@ export class GeminiReviewer implements ReviewerAdapter {
       if (stdout.trim()) {
         // Local CLI found, verify it works with a simple test
         try {
-          await execAsync('gemini "test" --model gemini-2.5-flash-lite', { timeout: 15000 });
+          await execAsync(`gemini "test" --model ${this.model}`, { timeout: 15000 });
           this.useDocker = false;
           return { available: true };
         } catch {
@@ -93,14 +104,14 @@ ${spec}`;
       return `docker run --rm -i \\
   -e GOOGLE_API_KEY="$GOOGLE_API_KEY" \\
   ${GEMINI_DOCKER_IMAGE} \\
-  --model gemini-2.5-flash-lite \\
+  --model ${this.model} \\
   -o json 2>/dev/null <<'GEMINI_PROMPT_EOF'
 ${prompt}
 GEMINI_PROMPT_EOF`;
     } else {
       // Local CLI command with heredoc to avoid escaping issues
       // Redirect stderr to suppress non-fatal extension warnings
-      return `gemini --model gemini-2.5-flash-lite -o json 2>/dev/null <<'GEMINI_PROMPT_EOF'
+      return `gemini --model ${this.model} -o json 2>/dev/null <<'GEMINI_PROMPT_EOF'
 ${prompt}
 GEMINI_PROMPT_EOF`;
     }

@@ -63,6 +63,13 @@ jobs:
         run: pnpm test:integration
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          # Reviewer configuration for Option B (Gemini + OpenRouter in CI)
+          # Local development uses Gemini + Ollama (free)
+          # CI uses Gemini + OpenRouter (OLMo 3.1 32B Think, ~$0.08/month)
+          REVIEWERS: gemini,openrouter
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: allenai/olmo-3.1-32b-think
 
   # Create Version Packages PR or Publish to npm (only on main after tests pass)
   release:

@@ -47,8 +47,9 @@ export interface LanguageConfig {
 
 /**
  * Reviewer types
+ * Supports multiple backends: Gemini (CLI/Docker), Ollama (local), OpenRouter (API), GitHub Models (API)
  */
-export type ReviewerType = 'gemini' | 'olmo';
+export type ReviewerType = 'gemini' | 'olmo' | 'openrouter' | 'github-models';
 
 /**
  * Review result from AI reviewer
@@ -132,11 +133,8 @@ export interface ImplementWorkflowContext extends BaseWorkflowContext {
   specPath: string | null;
   specContent: string | null;
 
-  // Reviews
-  reviews: {
-    gemini?: ReviewResult;
-    olmo?: ReviewResult;
-  };
+  // Reviews (dynamic - supports any reviewer type)
+  reviews: Record<string, ReviewResult>;
   refinedSpec: string | null;
 
   // Implementation artifacts

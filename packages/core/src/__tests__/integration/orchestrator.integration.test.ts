@@ -39,7 +39,30 @@ try {
   hasOllama = false;
 }
 
-const canRunTests = hasGemini && hasOllama;
+// Check for OpenRouter API key
+let hasOpenRouter = false;
+try {
+  hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
+} catch {
+  hasOpenRouter = false;
+}
+
+// Determine which reviewers are configured
+const reviewers = process.env.REVIEWERS?.split(',').map(r => r.trim()) || ['gemini', 'olmo'];
+
+// Check if all configured reviewers are available
+const canRunTests = reviewers.every(reviewer => {
+  switch (reviewer) {
+    case 'gemini':
+      return hasGemini;
+    case 'olmo':
+      return hasOllama;
+    case 'openrouter':
+      return hasOpenRouter;
+    default:
+      return false;
+  }
+});
 
 // Use describe.skip if prerequisites not met
 const describeIntegration = canRunTests ? describe : describe.skip;
@@ -47,7 +70,20 @@ const describeIntegration = canRunTests ? describe : describe.skip;
 // Log skip reason at module load time if prerequisites not met
 if (!canRunTests) {
   const skipReasons: string[] = [];
-  if (!hasGemini) {
+  const missingReviewers = reviewers.filter(reviewer => {
+    switch (reviewer) {
+      case 'gemini':
+        return !hasGemini;
+      case 'olmo':
+        return !hasOllama;
+      case 'openrouter':
+        return !hasOpenRouter;
+      default:
+        return true;
+    }
+  });
+
+  if (missingReviewers.includes('gemini')) {
     skipReasons.push('   Install Gemini CLI with cached credentials:');
     skipReasons.push('     npm install -g @google/generative-ai-cli');
     skipReasons.push('     gemini auth  # Follow auth prompts');
@@ -55,17 +91,25 @@ if (!canRunTests) {
     skipReasons.push('     export GOOGLE_API_KEY=your_api_key');
     skipReasons.push('     docker pull us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1');
   }
-  if (!hasOllama) {
+  if (missingReviewers.includes('olmo')) {
     skipReasons.push('   Install Ollama with OLMo model:');
     skipReasons.push('     ollama pull olmo-3.1:32b-think');
     skipReasons.push('     ollama serve');
   }
+  if (missingReviewers.includes('openrouter')) {
+    skipReasons.push('   Set up OpenRouter API (Option B - for CI):');
+    skipReasons.push('     Get API key from https://openrouter.ai/keys');
+    skipReasons.push('     export OPENROUTER_API_KEY=your_api_key');
+    skipReasons.push('     export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think');
+  }
 
   console.warn(
-    '\nℹ️  Integration tests skipped: Required reviewers not available.\n' +
+    `\nℹ️  Integration tests skipped: Required reviewers not available.\n` +
+    `   Configured reviewers: ${reviewers.join(', ')}\n` +
+    `   Missing: ${missingReviewers.join(', ')}\n\n` +
     '   To run integration tests, ensure:\n' +
     skipReasons.join('\n') +
-    '\n   Then run: pnpm test:integration\n'
+    '\n\n   Then run: pnpm test:integration\n'
   );
 }
 
