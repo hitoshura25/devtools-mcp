@@ -2,52 +2,23 @@
 
 This document describes the available AI reviewer backends for the devtools-mcp implementation workflow.
 
-## Overview
+## Architecture
 
-The implementation workflow supports multiple AI reviewer backends to validate specifications before implementation. You can configure which reviewers to use and run multiple reviewers simultaneously for better validation.
+The reviewer system separates two concepts:
+
+- **Reviewer Name** - User-defined identifier (e.g., `olmo-local`, `olmo-cloud`, `phi4-github`)
+- **Backend Type** - Infrastructure provider (`ollama`, `openrouter`, `github-models`)
+
+This allows you to:
+- Configure the same model through different backends
+- Give meaningful names to each configuration
+- Run multiple reviewers with different backends simultaneously
 
 ## Available Backends
 
-### 1. Gemini (Google)
+### 1. Ollama (Local)
 
-**Description:** Google's Gemini models via CLI or Docker
-
-**Setup:**
-- **Local CLI (Recommended for development):**
-  ```bash
-  npm install -g @google/generative-ai-cli
-  gemini auth  # Follow authentication prompts
-  ```
-
-- **Docker (Recommended for CI):**
-  ```bash
-  export GOOGLE_API_KEY=your_api_key
-  docker pull us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1
-  ```
-
-**Configuration:**
-```json
-{
-  "backends": {
-    "gemini": {
-      "model": "gemini-2.5-flash-lite",
-      "useDocker": false
-    }
-  }
-}
-```
-
-**Environment Variables:**
-- `GEMINI_MODEL` - Override model (default: `gemini-2.5-flash-lite`)
-- `GOOGLE_API_KEY` - Required for Docker mode
-
-**Cost:** Free tier available (15 RPM, 1M TPM, 1.5K RPD)
-
----
-
-### 2. Ollama (Local)
-
-**Description:** Run AI2's OLMo model locally via Ollama
+**Description:** Run AI models locally via Ollama
 
 **Setup:**
 ```bash
@@ -62,22 +33,6 @@ ollama pull olmo-3.1:32b-think
 ollama serve
 ```
 
-**Configuration:**
-```json
-{
-  "backends": {
-    "ollama": {
-      "baseUrl": "http://localhost:11434",
-      "model": "olmo-3.1:32b-think"
-    }
-  }
-}
-```
-
-**Environment Variables:**
-- `OLLAMA_BASE_URL` - Override base URL (default: `http://localhost:11434`)
-- `OLLAMA_MODEL` - Override model (default: `olmo-3.1:32b-think`)
-
 **Cost:** Free (local compute only)
 
 **Requirements:**
@@ -86,33 +41,15 @@ ollama serve
 
 ---
 
-### 3. OpenRouter (API) ⭐ Recommended for CI
+### 2. OpenRouter (API) ⭐ Recommended for CI
 
-**Description:** Access AI2's OLMo models via OpenRouter API
+**Description:** Access AI models via OpenRouter API
 
 **Setup:**
 ```bash
 # Get API key from https://openrouter.ai/keys
 export OPENROUTER_API_KEY=your_api_key
-export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 ```
-
-**Configuration:**
-```json
-{
-  "backends": {
-    "openrouter": {
-      "endpoint": "https://openrouter.ai/api/v1",
-      "model": "allenai/olmo-3.1-32b-think",
-      "temperature": 0.3
-    }
-  }
-}
-```
-
-**Environment Variables:**
-- `OPENROUTER_API_KEY` - Required (get from https://openrouter.ai/keys)
-- `OPENROUTER_MODEL` - Override model (default: `allenai/olmo-3.1-32b-think`)
 
 **Available AI2/OLMo Models:**
 - `allenai/olmo-3.1-32b-think` - Latest reasoning model (recommended)
@@ -137,20 +74,57 @@ export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 
 ---
 
-### 4. GitHub Models (Future)
+### 3. GitHub Models
 
 **Description:** Access models via GitHub's AI inference platform
 
-**Status:** Architecture ready, implementation pending
+**Setup:**
+```bash
+# Requires GitHub token with appropriate permissions
+export GITHUB_TOKEN=your_github_token
+```
 
-**Would provide:**
-- Automatic `GITHUB_TOKEN` authentication
-- Access to 14 models (Phi-4, GPT-4o mini, etc.)
-- OpenAI-compatible API
+**Available Models:**
+- `phi-4` - Microsoft's latest small language model
+- `gpt-4o-mini` - OpenAI's compact model
+- Multiple other models (14+ available)
+
+**Cost:** Paid API, pricing varies by model
+
+**Note:** GitHub Models backend is not yet implemented. Coming soon!
 
 ---
 
 ## Configuration
+
+### Configuration File
+
+Create `.devtools/reviewers.config.json`:
+
+```json
+{
+  "activeReviewers": ["olmo-local"],
+  "reviewers": {
+    "olmo-local": {
+      "type": "ollama",
+      "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
+    },
+    "olmo-cloud": {
+      "type": "openrouter",
+      "model": "allenai/olmo-3.1-32b-think",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "temperature": 0.3
+    },
+    "phi4-github": {
+      "type": "github-models",
+      "model": "phi-4",
+      "endpoint": "https://models.inference.ai.azure.com",
+      "temperature": 0.3
+    }
+  }
+}
+```
 
 ### Configuration Priority
 
@@ -158,19 +132,20 @@ export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 2. **Config File** (`.devtools/reviewers.config.json`)
 3. **Defaults** (embedded in code)
 
+---
+
+## Recommended Configurations
+
 ### Option A: OpenRouter Everywhere (Simplest)
 
 **Local + CI:** Same configuration everywhere
 
 ```json
 {
-  "reviewers": ["gemini", "openrouter"],
-  "backends": {
-    "gemini": {
-      "model": "gemini-2.5-flash-lite",
-      "useDocker": false
-    },
-    "openrouter": {
+  "activeReviewers": ["olmo-cloud"],
+  "reviewers": {
+    "olmo-cloud": {
+      "type": "openrouter",
       "model": "allenai/olmo-3.1-32b-think"
     }
   }
@@ -182,7 +157,7 @@ export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 export OPENROUTER_API_KEY=your_key
 ```
 
-**Cost:** ~$0.12/month ($0.04 local + $0.08 CI)
+**Cost:** ~$0.08/month (200 reviews)
 
 ---
 
@@ -194,15 +169,16 @@ export OPENROUTER_API_KEY=your_key
 **.devtools/reviewers.config.json:**
 ```json
 {
-  "reviewers": ["gemini", "ollama"],
-  "backends": {
-    "gemini": {
-      "model": "gemini-2.5-flash-lite",
-      "useDocker": false
+  "activeReviewers": ["olmo-local"],
+  "reviewers": {
+    "olmo-local": {
+      "type": "ollama",
+      "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
     },
-    "ollama": {
-      "baseUrl": "http://localhost:11434",
-      "model": "olmo-3.1:32b-think"
+    "olmo-cloud": {
+      "type": "openrouter",
+      "model": "allenai/olmo-3.1-32b-think"
     }
   }
 }
@@ -211,10 +187,8 @@ export OPENROUTER_API_KEY=your_key
 **.github/workflows/ci.yml:**
 ```yaml
 env:
-  REVIEWERS: gemini,openrouter  # Override for CI
-  GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+  ACTIVE_REVIEWERS: olmo-cloud  # Override for CI
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-  OPENROUTER_MODEL: allenai/olmo-3.1-32b-think
 ```
 
 **Cost:** ~$0.08/month (CI only)
@@ -226,28 +200,45 @@ env:
 
 ---
 
+### Option C: Multiple Reviewers
+
+Run multiple reviewers for comprehensive validation:
+
+```json
+{
+  "activeReviewers": ["olmo-local", "olmo-cloud"],
+  "reviewers": {
+    "olmo-local": {
+      "type": "ollama",
+      "model": "olmo-3.1:32b-think"
+    },
+    "olmo-cloud": {
+      "type": "openrouter",
+      "model": "allenai/olmo-3.1-32b-think"
+    }
+  }
+}
+```
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `REVIEWERS` | Comma-separated list of reviewers | `gemini,openrouter` |
-| `GEMINI_MODEL` | Gemini model override | `gemini-2.5-flash-lite` |
-| `GOOGLE_API_KEY` | Gemini Docker API key | `your_key` |
-| `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Ollama model override | `olmo-3.1:32b-think` |
+| `ACTIVE_REVIEWERS` | Comma-separated list of reviewer names | `olmo-local,olmo-cloud` |
 | `OPENROUTER_API_KEY` | OpenRouter API key | `sk-or-...` |
-| `OPENROUTER_MODEL` | OpenRouter model override | `allenai/olmo-3.1-32b-think` |
+| `GITHUB_TOKEN` | GitHub token for GitHub Models | `ghp_...` |
 
 ---
 
 ## Cost Comparison
 
-| Backend | Model | Cost per Review | Monthly (200 reviews) | Notes |
-|---------|-------|----------------|---------------------|--------|
-| **Ollama** | OLMo 3.1 32B Think | $0 | $0 | Local compute, 20-30GB RAM required |
-| **OpenRouter** | OLMo 3.1 32B Think | $0.0004 | **$0.08** | API-based, no local resources |
-| **Gemini** | gemini-2.5-flash-lite | $0 | $0 | Free tier (rate limits apply) |
-| GitHub Models | Phi-4 | $0.0005 | $1.00 | Not yet implemented |
+| Reviewer Config | Backend | Model | Cost per Review | Monthly (200 reviews) |
+|-----------------|---------|-------|----------------|---------------------|
+| `olmo-local` | Ollama | OLMo 3.1 32B | $0 | $0 |
+| `olmo-cloud` | OpenRouter | OLMo 3.1 32B | $0.0004 | **$0.08** |
+| `phi4-github` | GitHub Models | Phi-4 | Varies | Varies |
 
 **Recommendation:** Option B (Ollama local + OpenRouter CI) for optimal cost/benefit
 
@@ -255,32 +246,29 @@ env:
 
 ## When to Use Which Backend
 
-### Use Gemini When:
-- ✅ You want fast, free reviews
-- ✅ You're okay with rate limits
-- ✅ You need local CLI or Docker flexibility
-
 ### Use Ollama When:
 - ✅ You have 20-30GB RAM available
 - ✅ You want truly free, offline reviews
 - ✅ You want the full AI2 OLMo 32B model
 - ✅ You're developing locally
+- ✅ Privacy is important (all processing is local)
 
 ### Use OpenRouter When:
 - ✅ Running in CI/CD environments
 - ✅ You need actual AI2 OLMo model without local resources
 - ✅ You want consistency between local and CI
 - ✅ Cost is not a concern (~$0.08/month)
+- ✅ No local setup required
+
+### Use GitHub Models When:
+- ✅ Already using GitHub Actions for CI
+- ✅ Want to avoid managing additional API keys
+- ✅ Need access to multiple model providers
+- ✅ Prefer GitHub-native solutions
 
 ---
 
 ## Troubleshooting
-
-### Gemini: "CLI not found"
-```bash
-npm install -g @google/generative-ai-cli
-gemini auth
-```
 
 ### Ollama: "Connection refused"
 ```bash
@@ -290,6 +278,9 @@ ollama serve
 # Check if model is downloaded
 ollama list
 ollama pull olmo-3.1:32b-think
+
+# Verify server is running
+curl http://localhost:11434/api/tags
 ```
 
 ### OpenRouter: "API key not found"
@@ -299,17 +290,33 @@ export OPENROUTER_API_KEY=your_key
 
 # Verify it's set
 echo $OPENROUTER_API_KEY
+
+# Test the API
+curl https://openrouter.ai/api/v1/models \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY"
+```
+
+### GitHub Models: "Authentication failed"
+```bash
+# Verify token is set
+echo $GITHUB_TOKEN
+
+# Check token permissions
+# Token needs access to GitHub Models API
+
+# In GitHub Actions, token is automatically available
+# No manual setup needed
 ```
 
 ### Integration Tests: "Reviewers not available"
 ```bash
 # Check which reviewers are configured
-echo $REVIEWERS
+echo $ACTIVE_REVIEWERS
 
-# Ensure all configured reviewers are available
-# For gemini: check `which gemini` or GOOGLE_API_KEY
-# For ollama: check `curl http://localhost:11434/api/tags`
-# For openrouter: check $OPENROUTER_API_KEY
+# Ensure all configured reviewers have their backends available:
+# For ollama backends: check `curl http://localhost:11434/api/tags`
+# For openrouter backends: check $OPENROUTER_API_KEY is set
+# For github-models backends: check $GITHUB_TOKEN is set
 ```
 
 ---
@@ -319,10 +326,20 @@ echo $REVIEWERS
 The architecture is pluggable. To add a new backend:
 
 1. Create `packages/core/src/reviewers/your-backend.ts`
-2. Implement the `ReviewerAdapter` interface
-3. Update `ReviewerType` in `types.ts`
-4. Register in `ReviewerRegistry`
-5. Update config with backend section
+2. Implement the `ReviewerAdapter` interface:
+   ```typescript
+   interface ReviewerAdapter {
+     name: ReviewerName;
+     backendType: BackendType;
+     model: string;
+     checkAvailability(): Promise<ReviewerAvailability>;
+     getReviewCommand(spec: string, context: ReviewContext): string;
+     parseReviewOutput(output: string): ReviewResult;
+   }
+   ```
+3. Add backend type to `BackendType` in `types.ts`
+4. Register factory in `backendFactories` in `registry.ts`
+5. Add config interface (e.g., `YourBackendConfig`) in `types.ts`
 6. Add tests
 
-No changes needed to orchestrator or workflow logic! ✅
+No changes needed to orchestrator or workflow logic!

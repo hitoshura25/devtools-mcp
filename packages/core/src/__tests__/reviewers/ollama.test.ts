@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OllamaReviewer } from '@hitoshura25/core';
+import { OllamaAdapter } from '@hitoshura25/core';
+import type { OllamaBackendConfig } from '@hitoshura25/core';
 
 // Mock child_process exec
 const mockExec = vi.fn();
@@ -7,12 +8,17 @@ vi.mock('child_process', () => ({
   exec: (cmd: string, options: unknown, callback: unknown) => mockExec(cmd, options, callback),
 }));
 
-describe('OllamaReviewer', () => {
-  let reviewer: OllamaReviewer;
+describe('OllamaAdapter', () => {
+  const defaultConfig: OllamaBackendConfig = {
+    type: 'ollama',
+    model: 'olmo-3.1:32b-think',
+  };
+
+  let reviewer: OllamaAdapter;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    reviewer = new OllamaReviewer();
+    reviewer = new OllamaAdapter('olmo-local', defaultConfig);
   });
 
   describe('parseReviewOutput', () => {
@@ -62,7 +68,13 @@ describe('OllamaReviewer', () => {
 
     it('sets reviewer name correctly', () => {
       const result = reviewer.parseReviewOutput('{}');
-      expect(result.reviewer).toBe('olmo');
+      expect(result.reviewer).toBe('olmo-local');
+    });
+
+    it('includes backend type and model in result', () => {
+      const result = reviewer.parseReviewOutput('{}');
+      expect(result.backendType).toBe('ollama');
+      expect(result.model).toBe('olmo-3.1:32b-think');
     });
   });
 
@@ -77,17 +89,40 @@ describe('OllamaReviewer', () => {
     });
 
     it('uses custom base URL', () => {
-      const customReviewer = new OllamaReviewer({ baseUrl: 'http://custom:8080' });
+      const customConfig: OllamaBackendConfig = {
+        type: 'ollama',
+        model: 'olmo-3.1:32b-think',
+        baseUrl: 'http://custom:8080',
+      };
+      const customReviewer = new OllamaAdapter('olmo-custom', customConfig);
       const command = customReviewer.getReviewCommand('spec', { projectPath: '.' });
 
       expect(command).toContain('custom:8080');
     });
 
     it('uses custom model', () => {
-      const customReviewer = new OllamaReviewer({ model: 'custom-model' });
+      const customConfig: OllamaBackendConfig = {
+        type: 'ollama',
+        model: 'custom-model',
+      };
+      const customReviewer = new OllamaAdapter('custom-reviewer', customConfig);
       const command = customReviewer.getReviewCommand('spec', { projectPath: '.' });
 
       expect(command).toContain('custom-model');
+    });
+  });
+
+  describe('adapter properties', () => {
+    it('has correct name property', () => {
+      expect(reviewer.name).toBe('olmo-local');
+    });
+
+    it('has correct backendType property', () => {
+      expect(reviewer.backendType).toBe('ollama');
+    });
+
+    it('has correct model property', () => {
+      expect(reviewer.model).toBe('olmo-3.1:32b-think');
     });
   });
 });

@@ -7,34 +7,34 @@ describe('ImplementWorkflow Phases', () => {
       expect(canTransition(ImplementPhase.INITIALIZED, ImplementPhase.SPEC_CREATED)).toBe(true);
     });
 
-    it('blocks INITIALIZED → GEMINI_REVIEW_PENDING', () => {
-      expect(canTransition(ImplementPhase.INITIALIZED, ImplementPhase.GEMINI_REVIEW_PENDING)).toBe(
-        false
-      );
+    it('blocks INITIALIZED → REVIEWS_PENDING', () => {
+      expect(canTransition(ImplementPhase.INITIALIZED, ImplementPhase.REVIEWS_PENDING)).toBe(false);
     });
 
-    it('allows SPEC_CREATED → GEMINI_REVIEW_PENDING', () => {
-      expect(canTransition(ImplementPhase.SPEC_CREATED, ImplementPhase.GEMINI_REVIEW_PENDING)).toBe(
+    it('allows SPEC_CREATED → REVIEWS_PENDING', () => {
+      expect(canTransition(ImplementPhase.SPEC_CREATED, ImplementPhase.REVIEWS_PENDING)).toBe(true);
+    });
+
+    it('allows SPEC_CREATED → SPEC_REFINED (skip reviews)', () => {
+      expect(canTransition(ImplementPhase.SPEC_CREATED, ImplementPhase.SPEC_REFINED)).toBe(true);
+    });
+
+    it('allows REVIEWS_PENDING → REVIEWS_PENDING (queue processing)', () => {
+      expect(canTransition(ImplementPhase.REVIEWS_PENDING, ImplementPhase.REVIEWS_PENDING)).toBe(
         true
       );
     });
 
-    it('allows GEMINI_REVIEW_PENDING → GEMINI_REVIEW_COMPLETE', () => {
-      expect(
-        canTransition(ImplementPhase.GEMINI_REVIEW_PENDING, ImplementPhase.GEMINI_REVIEW_COMPLETE)
-      ).toBe(true);
+    it('allows REVIEWS_PENDING → REVIEWS_COMPLETE', () => {
+      expect(canTransition(ImplementPhase.REVIEWS_PENDING, ImplementPhase.REVIEWS_COMPLETE)).toBe(
+        true
+      );
     });
 
-    it('allows GEMINI_REVIEW_COMPLETE → SPEC_REFINED', () => {
-      expect(
-        canTransition(ImplementPhase.GEMINI_REVIEW_COMPLETE, ImplementPhase.SPEC_REFINED)
-      ).toBe(true);
-    });
-
-    it('allows GEMINI_REVIEW_COMPLETE → OLMO_REVIEW_PENDING', () => {
-      expect(
-        canTransition(ImplementPhase.GEMINI_REVIEW_COMPLETE, ImplementPhase.OLMO_REVIEW_PENDING)
-      ).toBe(true);
+    it('allows REVIEWS_COMPLETE → SPEC_REFINED', () => {
+      expect(canTransition(ImplementPhase.REVIEWS_COMPLETE, ImplementPhase.SPEC_REFINED)).toBe(
+        true
+      );
     });
 
     it('allows LINT_PENDING → LINT_PASSED', () => {

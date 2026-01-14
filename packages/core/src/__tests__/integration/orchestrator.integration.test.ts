@@ -1,6 +1,11 @@
 /**
  * Real integration test for the implementation workflow orchestrator
- * This actually calls Gemini CLI and Ollama (no mocks)
+ * This actually calls Ollama and OpenRouter (no mocks)
+ *
+ * Reviewer Architecture:
+ * - ReviewerName: User-defined string (e.g., "olmo-local", "olmo-cloud")
+ * - BackendType: Infrastructure provider ("ollama", "openrouter", "github-models")
+ * - Config maps reviewer names to their backend configurations
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -13,55 +18,56 @@ import { existsSync } from 'fs';
 
 const execAsync = promisify(exec);
 
-// Check if Gemini is available (local CLI with cached credentials OR Docker with GOOGLE_API_KEY)
-let hasGemini = false;
-try {
-  // Try local Gemini CLI first (uses cached credentials)
-  execSync('gemini "test" --model gemini-2.5-flash-lite', { timeout: 15000, stdio: 'ignore' });
-  hasGemini = true;
-} catch {
-  // Local CLI failed, check if Docker + GOOGLE_API_KEY available
-  try {
-    execSync('docker info', { timeout: 5000, stdio: 'ignore' });
-    hasGemini = !!process.env.GOOGLE_API_KEY; // Docker requires API key
-  } catch {
-    hasGemini = false;
-  }
-}
-
-// Check for Ollama synchronously
-let hasOllama = false;
+// Check for Ollama backend synchronously
+let hasOllamaBackend = false;
 try {
   const output = execSync('curl -s http://localhost:11434/api/tags', { timeout: 5000, encoding: 'utf-8' });
   const tags = JSON.parse(output);
-  hasOllama = tags.models?.some((m: { name: string }) => m.name.includes('olmo'));
+  hasOllamaBackend = tags.models?.some((m: { name: string }) => m.name.includes('olmo'));
 } catch {
-  hasOllama = false;
+  hasOllamaBackend = false;
 }
 
-// Check for OpenRouter API key
-let hasOpenRouter = false;
-try {
-  hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
-} catch {
-  hasOpenRouter = false;
-}
+// Check for OpenRouter backend (API key present)
+const hasOpenRouterBackend = !!process.env.OPENROUTER_API_KEY;
 
-// Determine which reviewers are configured
-const reviewers = process.env.REVIEWERS?.split(',').map(r => r.trim()) || ['gemini', 'olmo'];
+// Check for GitHub Models backend (token present)
+const hasGitHubModelsBackend = !!(process.env.GITHUB_TOKEN || process.env.GH_PAT);
 
-// Check if all configured reviewers are available
-const canRunTests = reviewers.every(reviewer => {
-  switch (reviewer) {
-    case 'gemini':
-      return hasGemini;
-    case 'olmo':
-      return hasOllama;
-    case 'openrouter':
-      return hasOpenRouter;
-    default:
-      return false;
+// Map of backend types to availability
+const backendAvailability: Record<string, boolean> = {
+  'ollama': hasOllamaBackend,
+  'openrouter': hasOpenRouterBackend,
+  'github-models': hasGitHubModelsBackend,
+};
+
+// Get active reviewers from environment (new format) or default
+// Format: ACTIVE_REVIEWERS=olmo-local,olmo-cloud
+const activeReviewers = process.env.ACTIVE_REVIEWERS?.split(',').map(r => r.trim()) || ['olmo-local'];
+
+// Determine which backend each reviewer uses (from the config)
+// For tests, we infer from reviewer name patterns:
+// - "olmo-local" -> ollama backend
+// - "olmo-cloud" -> openrouter backend
+// - "*-github" or "phi4-github" -> github-models backend
+function inferBackendType(reviewerName: string): string {
+  if (reviewerName.includes('-local') || reviewerName.endsWith('-ollama')) {
+    return 'ollama';
   }
+  if (reviewerName.includes('-cloud') || reviewerName.endsWith('-openrouter')) {
+    return 'openrouter';
+  }
+  if (reviewerName.includes('-github') || reviewerName.startsWith('phi')) {
+    return 'github-models';
+  }
+  // Default to ollama for unrecognized patterns
+  return 'ollama';
+}
+
+// Check if all configured reviewers have available backends
+const canRunTests = activeReviewers.every(reviewer => {
+  const backend = inferBackendType(reviewer);
+  return backendAvailability[backend] ?? false;
 });
 
 // Use describe.skip if prerequisites not met
@@ -70,43 +76,35 @@ const describeIntegration = canRunTests ? describe : describe.skip;
 // Log skip reason at module load time if prerequisites not met
 if (!canRunTests) {
   const skipReasons: string[] = [];
-  const missingReviewers = reviewers.filter(reviewer => {
-    switch (reviewer) {
-      case 'gemini':
-        return !hasGemini;
-      case 'olmo':
-        return !hasOllama;
-      case 'openrouter':
-        return !hasOpenRouter;
-      default:
-        return true;
+  const missingBackends = new Set<string>();
+
+  activeReviewers.forEach(reviewer => {
+    const backend = inferBackendType(reviewer);
+    if (!backendAvailability[backend]) {
+      missingBackends.add(backend);
     }
   });
 
-  if (missingReviewers.includes('gemini')) {
-    skipReasons.push('   Install Gemini CLI with cached credentials:');
-    skipReasons.push('     npm install -g @google/generative-ai-cli');
-    skipReasons.push('     gemini auth  # Follow auth prompts');
-    skipReasons.push('   OR use Docker:');
-    skipReasons.push('     export GOOGLE_API_KEY=your_api_key');
-    skipReasons.push('     docker pull us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1');
-  }
-  if (missingReviewers.includes('olmo')) {
+  if (missingBackends.has('ollama')) {
     skipReasons.push('   Install Ollama with OLMo model:');
     skipReasons.push('     ollama pull olmo-3.1:32b-think');
     skipReasons.push('     ollama serve');
   }
-  if (missingReviewers.includes('openrouter')) {
-    skipReasons.push('   Set up OpenRouter API (Option B - for CI):');
+  if (missingBackends.has('openrouter')) {
+    skipReasons.push('   Set up OpenRouter API (for CI):');
     skipReasons.push('     Get API key from https://openrouter.ai/keys');
     skipReasons.push('     export OPENROUTER_API_KEY=your_api_key');
-    skipReasons.push('     export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think');
+  }
+  if (missingBackends.has('github-models')) {
+    skipReasons.push('   Set up GitHub Models API:');
+    skipReasons.push('     export GITHUB_TOKEN=your_personal_access_token');
+    skipReasons.push('     Or in CI, use automatic ${{ secrets.GITHUB_TOKEN }}');
   }
 
   console.warn(
-    `\nℹ️  Integration tests skipped: Required reviewers not available.\n` +
-    `   Configured reviewers: ${reviewers.join(', ')}\n` +
-    `   Missing: ${missingReviewers.join(', ')}\n\n` +
+    `\nℹ️  Integration tests skipped: Required backends not available.\n` +
+    `   Active reviewers: ${activeReviewers.join(', ')}\n` +
+    `   Missing backends: ${Array.from(missingBackends).join(', ')}\n\n` +
     '   To run integration tests, ensure:\n' +
     skipReasons.join('\n') +
     '\n\n   Then run: pnpm test:integration\n'
@@ -154,14 +152,16 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
     }
   });
 
-  it('should complete full workflow with Gemini and OLMo reviews', async () => {
-    console.log('🚀 Starting workflow with both Gemini and OLMo reviewers...');
+  it('should complete workflow with configured reviewer', async () => {
+    // Use the first active reviewer for this test
+    const reviewerName = activeReviewers[0];
+    console.log(`🚀 Starting workflow with reviewer: ${reviewerName}`);
 
     // Step 1: Start workflow
     const startResult = await orchestrator.start({
       description: 'Add dark mode toggle to settings screen',
       projectPath: '.',
-      reviewers: ['gemini', 'olmo'],
+      reviewers: [reviewerName],
     });
 
     expect(startResult).toBeDefined();
@@ -240,103 +240,90 @@ Use standard theme switching with preference storage.
     // Step 3: Advance to spec_created phase
     const step1 = await orchestrator.step(workflowId, { success: true });
     expect(step1.phase).toBe('spec_created');
-    expect(step1.action?.type).toBe('shell');
 
-    // Step 4: Execute Gemini review
-    console.log('🤖 Executing Gemini review (may take 30-60 seconds)...');
-    const geminiCommand = step1.action?.command;
-    expect(geminiCommand).toBeDefined();
-    expect(geminiCommand).toContain('gemini');
-
-    const { stdout: geminiOutput } = await execAsync(geminiCommand as string, {
-      timeout: 90000,
-      maxBuffer: 1024 * 1024 * 10,
-    });
-
-    expect(geminiOutput).toBeDefined();
-    console.log('✅ Gemini review received');
-
-    // Step 5: Submit Gemini review
-    const step2 = await orchestrator.step(workflowId, {
-      success: true,
-      output: geminiOutput,
-    });
-
-    expect(step2.phase).toBe('olmo_review_pending');
+    // Step 4: Should get review action (reviews_pending phase)
+    const step2 = await orchestrator.step(workflowId, { success: true });
+    expect(step2.phase).toBe('reviews_pending');
     expect(step2.action?.type).toBe('shell');
 
-    const status1 = await orchestrator.getStatus(workflowId);
-    expect(status1?.reviews.gemini).toBeDefined();
-    expect(status1?.reviews.gemini?.reviewer).toBe('gemini');
-    console.log(`   Gemini approved: ${status1?.reviews.gemini?.approved}`);
+    // Step 5: Execute review command
+    const backendType = inferBackendType(reviewerName);
+    console.log(`🤖 Executing ${reviewerName} review (${backendType} backend)...`);
 
-    // Step 6: Execute OLMo review
-    console.log('🤖 Executing OLMo review (may take 3-5 minutes for 32B model)...');
-    const olmoCommand = step2.action?.command;
-    expect(olmoCommand).toBeDefined();
-    expect(olmoCommand).toMatch(/ollama|localhost:11434/); // Matches Ollama API endpoint
+    const reviewCommand = step2.action?.command;
+    expect(reviewCommand).toBeDefined();
 
-    const { stdout: olmoOutput } = await execAsync(olmoCommand as string, {
+    // Verify the command matches the expected backend
+    if (backendType === 'ollama') {
+      expect(reviewCommand).toMatch(/ollama|localhost:11434/);
+    } else if (backendType === 'openrouter') {
+      expect(reviewCommand).toMatch(/openrouter\.ai/);
+    }
+
+    const { stdout: reviewOutput } = await execAsync(reviewCommand as string, {
       timeout: 300000, // 5 minutes for large model
       maxBuffer: 1024 * 1024 * 10,
     });
 
-    expect(olmoOutput).toBeDefined();
-    console.log('✅ OLMo review received');
+    expect(reviewOutput).toBeDefined();
+    console.log(`✅ ${reviewerName} review received`);
 
-    // Step 7: Submit OLMo review
+    // Step 6: Submit review - should advance to reviews_complete then spec_refined
     const step3 = await orchestrator.step(workflowId, {
       success: true,
-      output: olmoOutput,
+      output: reviewOutput,
     });
 
-    expect(step3.phase).toBe('spec_refined');
+    // With single reviewer, we should go from reviews_pending -> reviews_complete
+    expect(step3.phase).toBe('reviews_complete');
 
-    const status2 = await orchestrator.getStatus(workflowId);
-    expect(status2?.reviews.olmo).toBeDefined();
-    expect(status2?.reviews.olmo?.reviewer).toBe('olmo');
-    console.log(`   OLMo approved: ${status2?.reviews.olmo?.approved}`);
+    // Step 7: Advance to spec_refined
+    const step4 = await orchestrator.step(workflowId, { success: true });
+    expect(step4.phase).toBe('spec_refined');
 
-    // Verify both reviews are stored
-    expect(status2?.reviews.gemini).toBeDefined();
-    expect(status2?.reviews.olmo).toBeDefined();
+    // Verify review was stored with the reviewer name as key
+    const status = await orchestrator.getStatus(workflowId);
+    expect(status?.reviews[reviewerName]).toBeDefined();
+    expect(status?.reviews[reviewerName]?.reviewer).toBe(reviewerName);
+    console.log(`   ${reviewerName} approved: ${status?.reviews[reviewerName]?.approved}`);
 
     // Verify review structure
-    expect(status2?.reviews.gemini?.feedback).toBeDefined();
-    expect(status2?.reviews.gemini?.suggestions).toBeInstanceOf(Array);
-    expect(status2?.reviews.gemini?.concerns).toBeInstanceOf(Array);
+    const review = status?.reviews[reviewerName];
+    expect(review?.feedback).toBeDefined();
+    expect(review?.suggestions).toBeInstanceOf(Array);
+    expect(review?.concerns).toBeInstanceOf(Array);
+    expect(review?.backendType).toBeDefined();
+    expect(review?.model).toBeDefined();
 
-    expect(status2?.reviews.olmo?.feedback).toBeDefined();
-    expect(status2?.reviews.olmo?.suggestions).toBeInstanceOf(Array);
-    expect(status2?.reviews.olmo?.concerns).toBeInstanceOf(Array);
-
-    // Save reviews to JSON file for analysis
+    // Save review to JSON file for analysis
     const reviewsOutput = {
       workflowId,
       timestamp: new Date().toISOString(),
-      gemini: status2?.reviews.gemini,
-      olmo: status2?.reviews.olmo,
+      reviewer: reviewerName,
+      backendType: review?.backendType,
+      model: review?.model,
+      review: review,
     };
-    const outputPath = 'src/__tests__/integration/test-output/ai-reviews-dual.json';
+    const outputPath = `src/__tests__/integration/test-output/ai-review-${reviewerName}.json`;
     await writeFile(
       outputPath,
       JSON.stringify(reviewsOutput, null, 2),
       'utf-8'
     );
 
-    console.log('✅ Both AI reviews completed and stored successfully');
-    console.log(`📄 Reviews saved to: ${outputPath}`);
+    console.log(`✅ ${reviewerName} review completed and stored successfully`);
+    console.log(`📄 Review saved to: ${outputPath}`);
 
-  }, 420000); // 7 minute timeout (Gemini ~1min + OLMo ~5min + overhead)
+  }, 420000); // 7 minute timeout
 
-  it('should handle Gemini-only workflow', async () => {
-    console.log('🚀 Starting workflow with Gemini only...');
+  it('should skip reviews when no reviewers configured', async () => {
+    console.log('🚀 Starting workflow with no reviewers...');
 
-    // Start workflow with only Gemini
+    // Start workflow with empty reviewers array
     const startResult = await orchestrator.start({
       description: 'Add user authentication',
       projectPath: '.',
-      reviewers: ['gemini'],
+      reviewers: [],
     });
 
     workflowId = startResult.workflowId;
@@ -359,42 +346,16 @@ Add basic user authentication to the app.
     const step1 = await orchestrator.step(workflowId, { success: true });
     expect(step1.phase).toBe('spec_created');
 
-    // Execute Gemini review
-    console.log('🤖 Executing Gemini review...');
-    const command = step1.action?.command;
-    expect(command).toBeDefined();
-    const { stdout } = await execAsync(command as string, {
-      timeout: 90000,
-      maxBuffer: 1024 * 1024 * 10,
-    });
-
-    // Submit review - should go directly to spec_refined (skip OLMo)
-    const step2 = await orchestrator.step(workflowId, {
-      success: true,
-      output: stdout,
-    });
-
+    // With no reviewers, should skip directly to spec_refined
+    const step2 = await orchestrator.step(workflowId, { success: true });
     expect(step2.phase).toBe('spec_refined');
 
     const status = await orchestrator.getStatus(workflowId);
-    expect(status?.reviews.gemini).toBeDefined();
-    expect(status?.reviews.olmo).toBeUndefined();
+    expect(status?.activeReviewers).toEqual([]);
+    expect(status?.completedReviewers).toEqual([]);
+    expect(Object.keys(status?.reviews || {})).toHaveLength(0);
 
-    // Save review to JSON file for analysis
-    const reviewsOutput = {
-      workflowId,
-      timestamp: new Date().toISOString(),
-      gemini: status?.reviews.gemini,
-    };
-    const outputPath = 'src/__tests__/integration/test-output/ai-reviews-gemini-only.json';
-    await writeFile(
-      outputPath,
-      JSON.stringify(reviewsOutput, null, 2),
-      'utf-8'
-    );
+    console.log('✅ No-reviewer workflow skipped reviews correctly');
 
-    console.log('✅ Gemini-only workflow completed');
-    console.log(`📄 Review saved to: ${outputPath}`);
-
-  }, 120000); // 2 minute timeout
+  }, 30000); // 30 second timeout
 });

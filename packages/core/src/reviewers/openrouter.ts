@@ -1,26 +1,34 @@
 /**
- * OpenRouter reviewer adapter
- * Provides access to AI2 OLMo models via OpenRouter API
+ * OpenRouter backend adapter
+ * Provides access to various LLM models via OpenRouter API
  */
 
-import type { ReviewerAdapter, ReviewerAvailability, ReviewContext, ReviewResult } from './types.js';
+import type {
+  ReviewerAdapter,
+  ReviewerAvailability,
+  ReviewContext,
+  ReviewResult,
+  ReviewerName,
+  OpenRouterBackendConfig,
+} from './types.js';
 
-export interface OpenRouterReviewerOptions {
-  endpoint?: string;
-  model?: string;
-  temperature?: number;
-}
+const DEFAULT_ENDPOINT = 'https://openrouter.ai/api/v1';
+const DEFAULT_MODEL = 'allenai/olmo-3.1-32b-think';
+const DEFAULT_TEMPERATURE = 0.3;
 
-export class OpenRouterReviewer implements ReviewerAdapter {
-  name = 'openrouter' as const;
+export class OpenRouterAdapter implements ReviewerAdapter {
+  readonly name: ReviewerName;
+  readonly backendType = 'openrouter' as const;
+  readonly model: string;
+
   private endpoint: string;
-  private model: string;
   private temperature: number;
 
-  constructor(options?: OpenRouterReviewerOptions) {
-    this.endpoint = options?.endpoint ?? 'https://openrouter.ai/api/v1';
-    this.model = options?.model ?? 'allenai/olmo-3.1-32b-think';
-    this.temperature = options?.temperature ?? 0.3;
+  constructor(reviewerName: ReviewerName, config: OpenRouterBackendConfig) {
+    this.name = reviewerName;
+    this.model = config.model ?? DEFAULT_MODEL;
+    this.endpoint = config.endpoint ?? DEFAULT_ENDPOINT;
+    this.temperature = config.temperature ?? DEFAULT_TEMPERATURE;
   }
 
   async checkAvailability(): Promise<ReviewerAvailability> {
@@ -81,6 +89,13 @@ OPENROUTER_JSON_EOF`;
   }
 
   parseReviewOutput(output: string): ReviewResult {
+    const baseResult = {
+      reviewer: this.name,
+      backendType: this.backendType,
+      model: this.model,
+      timestamp: new Date().toISOString(),
+    };
+
     try {
       // Parse OpenAI-compatible response
       const response = JSON.parse(output);
@@ -94,8 +109,7 @@ OPENROUTER_JSON_EOF`;
       try {
         const reviewData = JSON.parse(content);
         return {
-          reviewer: 'openrouter',
-          timestamp: new Date().toISOString(),
+          ...baseResult,
           feedback: reviewData.feedback || content,
           suggestions: reviewData.suggestions || [],
           concerns: reviewData.concerns || [],
@@ -107,8 +121,7 @@ OPENROUTER_JSON_EOF`;
         if (jsonMatch) {
           const reviewData = JSON.parse(jsonMatch[0]);
           return {
-            reviewer: 'openrouter',
-            timestamp: new Date().toISOString(),
+            ...baseResult,
             feedback: reviewData.feedback || content,
             suggestions: reviewData.suggestions || [],
             concerns: reviewData.concerns || [],
@@ -118,19 +131,17 @@ OPENROUTER_JSON_EOF`;
 
         // No JSON found, use text as feedback
         return {
-          reviewer: 'openrouter',
-          timestamp: new Date().toISOString(),
+          ...baseResult,
           feedback: content,
           suggestions: [],
           concerns: [],
           approved: false,
         };
       }
-    } catch (error) {
+    } catch {
       // Failed to parse response, treat as plain text
       return {
-        reviewer: 'openrouter',
-        timestamp: new Date().toISOString(),
+        ...baseResult,
         feedback: output,
         suggestions: [],
         concerns: [],
@@ -139,3 +150,6 @@ OPENROUTER_JSON_EOF`;
     }
   }
 }
+
+// Backward compatibility alias
+export const OpenRouterReviewer = OpenRouterAdapter;

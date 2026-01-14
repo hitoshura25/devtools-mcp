@@ -1,11 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { OpenRouterReviewer } from '@hitoshura25/core';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { OpenRouterAdapter } from '@hitoshura25/core';
+import type { OpenRouterBackendConfig } from '@hitoshura25/core';
 
-describe('OpenRouterReviewer', () => {
-  let reviewer: OpenRouterReviewer;
+describe('OpenRouterAdapter', () => {
+  const defaultConfig: OpenRouterBackendConfig = {
+    type: 'openrouter',
+    model: 'allenai/olmo-3.1-32b-think',
+  };
+
+  let reviewer: OpenRouterAdapter;
 
   beforeEach(() => {
-    reviewer = new OpenRouterReviewer();
+    reviewer = new OpenRouterAdapter('olmo-cloud', defaultConfig);
   });
 
   describe('parseReviewOutput', () => {
@@ -75,7 +81,13 @@ describe('OpenRouterReviewer', () => {
 
     it('sets reviewer name correctly', () => {
       const result = reviewer.parseReviewOutput('{}');
-      expect(result.reviewer).toBe('openrouter');
+      expect(result.reviewer).toBe('olmo-cloud');
+    });
+
+    it('includes backend type and model in result', () => {
+      const result = reviewer.parseReviewOutput('{}');
+      expect(result.backendType).toBe('openrouter');
+      expect(result.model).toBe('allenai/olmo-3.1-32b-think');
     });
 
     it('sets timestamp', () => {
@@ -105,23 +117,35 @@ describe('OpenRouterReviewer', () => {
     });
 
     it('uses custom endpoint', () => {
-      const customReviewer = new OpenRouterReviewer({
+      const customConfig: OpenRouterBackendConfig = {
+        type: 'openrouter',
+        model: 'allenai/olmo-3.1-32b-think',
         endpoint: 'https://custom.openrouter.ai/api/v1',
-      });
+      };
+      const customReviewer = new OpenRouterAdapter('custom-router', customConfig);
       const command = customReviewer.getReviewCommand('spec', { projectPath: '.' });
 
       expect(command).toContain('https://custom.openrouter.ai/api/v1');
     });
 
     it('uses custom model', () => {
-      const customReviewer = new OpenRouterReviewer({ model: 'allenai/olmo-2-32b-instruct' });
+      const customConfig: OpenRouterBackendConfig = {
+        type: 'openrouter',
+        model: 'allenai/olmo-2-32b-instruct',
+      };
+      const customReviewer = new OpenRouterAdapter('olmo2-reviewer', customConfig);
       const command = customReviewer.getReviewCommand('spec', { projectPath: '.' });
 
       expect(command).toContain('allenai/olmo-2-32b-instruct');
     });
 
     it('uses custom temperature', () => {
-      const customReviewer = new OpenRouterReviewer({ temperature: 0.7 });
+      const customConfig: OpenRouterBackendConfig = {
+        type: 'openrouter',
+        model: 'allenai/olmo-3.1-32b-think',
+        temperature: 0.7,
+      };
+      const customReviewer = new OpenRouterAdapter('warm-reviewer', customConfig);
       const command = customReviewer.getReviewCommand('spec', { projectPath: '.' });
 
       expect(command).toContain('"temperature": 0.7');
@@ -161,6 +185,20 @@ describe('OpenRouterReviewer', () => {
       expect(result.available).toBe(false);
       expect(result.reason).toContain('OPENROUTER_API_KEY');
       expect(result.installInstructions).toBeTruthy();
+    });
+  });
+
+  describe('adapter properties', () => {
+    it('has correct name property', () => {
+      expect(reviewer.name).toBe('olmo-cloud');
+    });
+
+    it('has correct backendType property', () => {
+      expect(reviewer.backendType).toBe('openrouter');
+    });
+
+    it('has correct model property', () => {
+      expect(reviewer.model).toBe('allenai/olmo-3.1-32b-think');
     });
   });
 });

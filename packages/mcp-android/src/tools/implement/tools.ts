@@ -7,6 +7,7 @@ import {
   ReviewerUnavailableError,
   reviewerRegistry,
   type ToolResult,
+  type ReviewerName,
 } from '@hitoshura25/core';
 import { androidConfig } from './commands.js';
 
@@ -19,7 +20,7 @@ const orchestrator = new ImplementOrchestrator(androidConfig, reviewerRegistry);
 export interface ImplementStartInput {
   description: string;
   project_path?: string;
-  reviewers?: ('gemini' | 'olmo')[];
+  reviewers?: ReviewerName[];
 }
 
 /**

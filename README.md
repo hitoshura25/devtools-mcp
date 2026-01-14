@@ -54,20 +54,16 @@ pnpm clean
 
 ## Reviewer Configuration
 
-The implementation workflow uses AI reviewers to validate specifications. You can configure which reviewers to use and run multiple reviewers simultaneously.
+The implementation workflow uses AI reviewers to validate specifications. You can configure which reviewers to use.
 
 ### Quick Start (Default)
 
-The default configuration uses Gemini + Ollama for local development:
+The default configuration uses Ollama for local development:
 
 ```bash
 # Install Ollama and download OLMo model
 ollama pull olmo-3.1:32b-think
 ollama serve
-
-# Install Gemini CLI
-npm install -g @google/generative-ai-cli
-gemini auth
 ```
 
 ### Recommended Setup: Free Local + Paid CI
@@ -77,13 +73,10 @@ For the best cost/benefit, use **Ollama** locally (free) and **OpenRouter** in C
 **Local Development (.devtools/reviewers.config.json):**
 ```json
 {
-  "reviewers": ["gemini", "ollama"],
+  "reviewers": ["ollama"],
   "backends": {
-    "gemini": {
-      "model": "gemini-2.5-flash-lite",
-      "useDocker": false
-    },
     "ollama": {
+      "baseUrl": "http://localhost:11434",
       "model": "olmo-3.1:32b-think"
     }
   }
@@ -92,7 +85,7 @@ For the best cost/benefit, use **Ollama** locally (free) and **OpenRouter** in C
 
 **CI Environment (override with env vars):**
 ```bash
-export REVIEWERS=gemini,openrouter
+export REVIEWERS=openrouter
 export OPENROUTER_API_KEY=your_key  # Get from https://openrouter.ai/keys
 export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 ```
@@ -101,9 +94,9 @@ export OPENROUTER_MODEL=allenai/olmo-3.1-32b-think
 
 | Backend | Cost | Best For | Setup |
 |---------|------|----------|-------|
-| **Gemini** | Free | Local + CI | `npm install -g @google/generative-ai-cli` |
 | **Ollama** | Free | Local only | `ollama pull olmo-3.1:32b-think` |
 | **OpenRouter** | ~$0.08/mo | CI environments | Get API key from [openrouter.ai](https://openrouter.ai/keys) |
+| **GitHub Models** | Varies | CI with GitHub | Use `GITHUB_TOKEN` or `GH_PAT` |
 
 See [docs/REVIEWERS.md](./docs/REVIEWERS.md) for detailed configuration options, cost comparisons, and troubleshooting.
 

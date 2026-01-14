@@ -9,10 +9,10 @@ import { FileWorkflowStorage } from '../persistence.js';
 import { ImplementPhase } from './phases.js';
 import { generateSpecTemplate, getSpecFileName } from './spec-template.js';
 import type { ReviewerRegistry } from '../../reviewers/registry.js';
+import type { ReviewerName } from '../../reviewers/types.js';
 import type {
   ImplementWorkflowContext,
   LanguageConfig,
-  ReviewerType,
   StepResult,
   WorkflowAction,
   CommandResult,
@@ -51,13 +51,15 @@ export class ImplementOrchestrator {
   async start(options: {
     description: string;
     projectPath: string;
-    reviewers?: ReviewerType[];
+    reviewers?: ReviewerName[];
   }): Promise<{ workflowId: string; action: WorkflowAction }> {
-    const reviewers = options.reviewers ?? ['gemini'];
+    // Get active reviewers from options or registry
+    const activeReviewers =
+      options.reviewers ?? this.reviewerRegistry?.getActiveReviewers() ?? [];
 
     // Check reviewer availability (strict mode - fail if unavailable)
     if (this.reviewerRegistry) {
-      for (const reviewer of reviewers) {
+      for (const reviewer of activeReviewers) {
         const availability = await this.reviewerRegistry.checkAvailability(reviewer);
         if (!availability.available) {
           throw new ReviewerUnavailableError(reviewer, availability);
@@ -77,8 +79,11 @@ export class ImplementOrchestrator {
       description: options.description,
       projectPath: options.projectPath,
       languageConfig: this.languageConfig,
-      reviewers,
+      activeReviewers,
       phase: ImplementPhase.INITIALIZED,
+      // Initialize review queue
+      pendingReviewers: [...activeReviewers],
+      completedReviewers: [],
       specPath,
       specContent: null,
       reviews: {},
@@ -164,63 +169,50 @@ export class ImplementOrchestrator {
 
         return {
           nextPhase: ImplementPhase.SPEC_CREATED,
-          action: this.getGeminiReviewAction(context),
+          action: null,
         };
 
       case ImplementPhase.SPEC_CREATED:
-        // If stepResult has output, we're submitting Gemini review
-        if (stepResult?.output && this.reviewerRegistry) {
-          const adapter = this.reviewerRegistry.get('gemini');
-          context.reviews.gemini = adapter.parseReviewOutput(stepResult.output);
-
-          // Check if we need OLMo review next
-          const hasOlmo = context.reviewers.includes('olmo');
+        // Start review queue if we have reviewers
+        if (context.pendingReviewers.length === 0) {
+          // No reviewers configured, skip to refinement
           return {
-            nextPhase: hasOlmo
-              ? ImplementPhase.OLMO_REVIEW_PENDING
-              : ImplementPhase.SPEC_REFINED,
-            action: hasOlmo ? this.getOlmoReviewAction(context) : this.getRefineSpecAction(context),
+            nextPhase: ImplementPhase.SPEC_REFINED,
+            action: this.getRefineSpecAction(context),
+          };
+        }
+        return {
+          nextPhase: ImplementPhase.REVIEWS_PENDING,
+          action: this.getNextReviewAction(context),
+        };
+
+      case ImplementPhase.REVIEWS_PENDING:
+        // Process review result from the current reviewer
+        if (stepResult?.output && this.reviewerRegistry && context.pendingReviewers.length > 0) {
+          const currentReviewer = context.pendingReviewers[0];
+          const adapter = this.reviewerRegistry.get(currentReviewer);
+          context.reviews[currentReviewer] = adapter.parseReviewOutput(stepResult.output);
+
+          // Move reviewer from pending to completed
+          context.pendingReviewers.shift();
+          context.completedReviewers.push(currentReviewer);
+        }
+
+        // Check if more reviewers pending
+        if (context.pendingReviewers.length > 0) {
+          return {
+            nextPhase: ImplementPhase.REVIEWS_PENDING,
+            action: this.getNextReviewAction(context),
           };
         }
 
-        // Otherwise, return Gemini review action
+        // All reviews complete
         return {
-          nextPhase: ImplementPhase.GEMINI_REVIEW_PENDING,
-          action: this.getGeminiReviewAction(context),
-        };
-
-      case ImplementPhase.GEMINI_REVIEW_PENDING: {
-        if (stepResult?.output && this.reviewerRegistry) {
-          const adapter = this.reviewerRegistry.get('gemini');
-          context.reviews.gemini = adapter.parseReviewOutput(stepResult.output);
-        }
-
-        const hasOlmo = context.reviewers.includes('olmo');
-        return {
-          nextPhase: hasOlmo
-            ? ImplementPhase.OLMO_REVIEW_PENDING
-            : ImplementPhase.SPEC_REFINED,
-          action: hasOlmo ? this.getOlmoReviewAction(context) : this.getRefineSpecAction(context),
-        };
-      }
-
-      case ImplementPhase.OLMO_REVIEW_PENDING:
-        if (stepResult?.output && this.reviewerRegistry) {
-          const adapter = this.reviewerRegistry.get('olmo');
-          context.reviews.olmo = adapter.parseReviewOutput(stepResult.output);
-        }
-        return {
-          nextPhase: ImplementPhase.SPEC_REFINED,
+          nextPhase: ImplementPhase.REVIEWS_COMPLETE,
           action: this.getRefineSpecAction(context),
         };
 
-      case ImplementPhase.GEMINI_REVIEW_COMPLETE:
-        return {
-          nextPhase: ImplementPhase.SPEC_REFINED,
-          action: this.getRefineSpecAction(context),
-        };
-
-      case ImplementPhase.OLMO_REVIEW_COMPLETE:
+      case ImplementPhase.REVIEWS_COMPLETE:
         return {
           nextPhase: ImplementPhase.SPEC_REFINED,
           action: this.getRefineSpecAction(context),
@@ -318,7 +310,7 @@ export class ImplementOrchestrator {
     }
   }
 
-  // Action generators using language-specific commands
+  // Action generators
 
   private getLintAction(context: ImplementWorkflowContext): WorkflowAction {
     return {
@@ -350,16 +342,20 @@ export class ImplementOrchestrator {
     };
   }
 
-  private getGeminiReviewAction(context: ImplementWorkflowContext): WorkflowAction {
-    if (!this.reviewerRegistry) {
+  /**
+   * Get review action for the next pending reviewer
+   */
+  private getNextReviewAction(context: ImplementWorkflowContext): WorkflowAction {
+    if (!this.reviewerRegistry || context.pendingReviewers.length === 0) {
       return {
         type: 'shell',
-        command: 'echo "Reviewer registry not configured"',
-        instruction: 'Skip review - registry not configured',
+        command: 'echo "No reviewers configured"',
+        instruction: 'Skip review - no reviewers configured',
       };
     }
 
-    const adapter = this.reviewerRegistry.get('gemini');
+    const reviewerName = context.pendingReviewers[0];
+    const adapter = this.reviewerRegistry.get(reviewerName);
     const command = adapter.getReviewCommand(context.specContent ?? '', {
       projectPath: context.projectPath,
     });
@@ -367,29 +363,7 @@ export class ImplementOrchestrator {
     return {
       type: 'shell',
       command,
-      instruction: 'Run the Gemini review command and capture the output',
-      captureOutput: true,
-    };
-  }
-
-  private getOlmoReviewAction(context: ImplementWorkflowContext): WorkflowAction {
-    if (!this.reviewerRegistry) {
-      return {
-        type: 'shell',
-        command: 'echo "Reviewer registry not configured"',
-        instruction: 'Skip review - registry not configured',
-      };
-    }
-
-    const adapter = this.reviewerRegistry.get('olmo');
-    const command = adapter.getReviewCommand(context.specContent ?? '', {
-      projectPath: context.projectPath,
-    });
-
-    return {
-      type: 'shell',
-      command,
-      instruction: 'Run the OLMo review command and capture the output',
+      instruction: `Run the ${reviewerName} review command and capture the output`,
       captureOutput: true,
     };
   }
@@ -400,7 +374,9 @@ export class ImplementOrchestrator {
     return {
       type: 'edit_file',
       path: context.specPath!,
-      instruction: `Update the spec to address review feedback:\n\n${synthesis}`,
+      instruction: synthesis
+        ? `Update the spec to address review feedback:\n\n${synthesis}`
+        : 'Review and finalize the spec (no AI reviews were performed)',
     };
   }
 
@@ -441,29 +417,25 @@ export class ImplementOrchestrator {
     };
   }
 
+  /**
+   * Synthesize reviews from all completed reviewers
+   */
   private synthesizeReviews(context: ImplementWorkflowContext): string {
     const parts: string[] = [];
 
-    if (context.reviews.gemini) {
-      parts.push(`**Gemini Review:**`);
-      parts.push(`- Feedback: ${context.reviews.gemini.feedback}`);
-      if (context.reviews.gemini.suggestions.length > 0) {
-        parts.push(`- Suggestions: ${context.reviews.gemini.suggestions.join(', ')}`);
-      }
-      if (context.reviews.gemini.concerns.length > 0) {
-        parts.push(`- Concerns: ${context.reviews.gemini.concerns.join(', ')}`);
-      }
-    }
+    for (const reviewerName of context.completedReviewers) {
+      const review = context.reviews[reviewerName];
+      if (!review) continue;
 
-    if (context.reviews.olmo) {
-      parts.push(`\n**OLMo Review:**`);
-      parts.push(`- Feedback: ${context.reviews.olmo.feedback}`);
-      if (context.reviews.olmo.suggestions.length > 0) {
-        parts.push(`- Suggestions: ${context.reviews.olmo.suggestions.join(', ')}`);
+      parts.push(`**${reviewerName} Review** (${review.backendType}/${review.model}):`);
+      parts.push(`- Feedback: ${review.feedback}`);
+      if (review.suggestions.length > 0) {
+        parts.push(`- Suggestions: ${review.suggestions.join(', ')}`);
       }
-      if (context.reviews.olmo.concerns.length > 0) {
-        parts.push(`- Concerns: ${context.reviews.olmo.concerns.join(', ')}`);
+      if (review.concerns.length > 0) {
+        parts.push(`- Concerns: ${review.concerns.join(', ')}`);
       }
+      parts.push('');
     }
 
     return parts.join('\n');

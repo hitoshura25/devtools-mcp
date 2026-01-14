@@ -1,25 +1,35 @@
 /**
- * Ollama reviewer adapter (OLMo model)
+ * Ollama backend adapter
+ * Runs LLM models locally via Ollama service
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { ReviewerAdapter, ReviewerAvailability, ReviewContext, ReviewResult } from './types.js';
+import type {
+  ReviewerAdapter,
+  ReviewerAvailability,
+  ReviewContext,
+  ReviewResult,
+  ReviewerName,
+  OllamaBackendConfig,
+} from './types.js';
 
 const execAsync = promisify(exec);
 
-const OLLAMA_BASE_URL = 'http://localhost:11434';
-const OLMO_MODEL = 'olmo-3.1:32b-think';
+const DEFAULT_BASE_URL = 'http://localhost:11434';
+const DEFAULT_MODEL = 'olmo-3.1:32b-think';
 
-export class OllamaReviewer implements ReviewerAdapter {
-  name = 'olmo' as const;
+export class OllamaAdapter implements ReviewerAdapter {
+  readonly name: ReviewerName;
+  readonly backendType = 'ollama' as const;
+  readonly model: string;
 
   private baseUrl: string;
-  private model: string;
 
-  constructor(options?: { baseUrl?: string; model?: string }) {
-    this.baseUrl = options?.baseUrl ?? OLLAMA_BASE_URL;
-    this.model = options?.model ?? OLMO_MODEL;
+  constructor(reviewerName: ReviewerName, config: OllamaBackendConfig) {
+    this.name = reviewerName;
+    this.model = config.model ?? DEFAULT_MODEL;
+    this.baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
   }
 
   async checkAvailability(): Promise<ReviewerAvailability> {
@@ -33,7 +43,7 @@ export class OllamaReviewer implements ReviewerAdapter {
       if (stdout.trim() !== '200') {
         return {
           available: false,
-          reason: 'Ollama is not running',
+          reason: `Ollama is not running at ${this.baseUrl}`,
           installInstructions:
             'Install Ollama: https://ollama.ai/download\n' + 'Then run: ollama serve',
         };
@@ -41,25 +51,26 @@ export class OllamaReviewer implements ReviewerAdapter {
     } catch {
       return {
         available: false,
-        reason: 'Ollama is not running',
+        reason: `Ollama is not running at ${this.baseUrl}`,
         installInstructions:
           'Install Ollama: https://ollama.ai/download\n' + 'Then run: ollama serve',
       };
     }
 
-    // Check if OLMo model is available
+    // Check if the configured model is available
     try {
       const { stdout } = await execAsync(`curl -s ${this.baseUrl}/api/tags`, { timeout: 5000 });
 
       const tags = JSON.parse(stdout);
-      const hasOlmo = tags.models?.some(
-        (m: { name: string }) => m.name.includes('olmo') || m.name.includes(this.model)
+      const modelName = this.model.split(':')[0]; // Get base model name
+      const hasModel = tags.models?.some(
+        (m: { name: string }) => m.name.includes(modelName) || m.name === this.model
       );
 
-      if (!hasOlmo) {
+      if (!hasModel) {
         return {
           available: false,
-          reason: `OLMo model not found`,
+          reason: `Model '${this.model}' not found in Ollama`,
           installInstructions: `Run: ollama pull ${this.model}`,
         };
       }
@@ -107,6 +118,13 @@ OLLAMA_JSON_EOF`;
   }
 
   parseReviewOutput(output: string): ReviewResult {
+    const baseResult = {
+      reviewer: this.name,
+      backendType: this.backendType,
+      model: this.model,
+      timestamp: new Date().toISOString(),
+    };
+
     try {
       const response = JSON.parse(output);
       const content = response.choices?.[0]?.message?.content || output;
@@ -115,8 +133,7 @@ OLLAMA_JSON_EOF`;
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
-          reviewer: 'olmo',
-          timestamp: new Date().toISOString(),
+          ...baseResult,
           feedback: parsed.feedback || content,
           suggestions: parsed.suggestions || [],
           concerns: parsed.concerns || [],
@@ -125,8 +142,7 @@ OLLAMA_JSON_EOF`;
       }
 
       return {
-        reviewer: 'olmo',
-        timestamp: new Date().toISOString(),
+        ...baseResult,
         feedback: content,
         suggestions: [],
         concerns: [],
@@ -134,8 +150,7 @@ OLLAMA_JSON_EOF`;
       };
     } catch {
       return {
-        reviewer: 'olmo',
-        timestamp: new Date().toISOString(),
+        ...baseResult,
         feedback: output,
         suggestions: [],
         concerns: [],
@@ -144,3 +159,6 @@ OLLAMA_JSON_EOF`;
     }
   }
 }
+
+// Backward compatibility alias
+export const OllamaReviewer = OllamaAdapter;

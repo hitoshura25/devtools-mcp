@@ -4,6 +4,7 @@
 
 import type { BaseWorkflowContext } from '../types.js';
 import type { ImplementPhase } from './phases.js';
+import type { ReviewerName, ReviewResult } from '../../reviewers/types.js';
 
 /**
  * Language-specific commands for build verification
@@ -43,24 +44,6 @@ export interface LanguageConfig {
 
   /** Directory for specs (default: "specs/") */
   specsDir?: string;
-}
-
-/**
- * Reviewer types
- * Supports multiple backends: Gemini (CLI/Docker), Ollama (local), OpenRouter (API), GitHub Models (API)
- */
-export type ReviewerType = 'gemini' | 'olmo' | 'openrouter' | 'github-models';
-
-/**
- * Review result from AI reviewer
- */
-export interface ReviewResult {
-  reviewer: string;
-  timestamp: string;
-  feedback: string;
-  suggestions: string[];
-  concerns: string[];
-  approved: boolean;
 }
 
 /**
@@ -124,17 +107,25 @@ export interface ImplementWorkflowContext extends BaseWorkflowContext {
   description: string;
   projectPath: string;
   languageConfig: LanguageConfig;
-  reviewers: ReviewerType[];
+
+  /** List of reviewer names to use (in order) */
+  activeReviewers: ReviewerName[];
 
   // State
   phase: ImplementPhase;
+
+  // Review queue tracking
+  /** Reviewers still waiting to be processed */
+  pendingReviewers: ReviewerName[];
+  /** Reviewers that have completed their review */
+  completedReviewers: ReviewerName[];
 
   // Spec
   specPath: string | null;
   specContent: string | null;
 
-  // Reviews (dynamic - supports any reviewer type)
-  reviews: Record<string, ReviewResult>;
+  // Reviews - keyed by reviewer name (e.g., "olmo-local", "olmo-cloud")
+  reviews: Record<ReviewerName, ReviewResult>;
   refinedSpec: string | null;
 
   // Implementation artifacts
@@ -150,3 +141,6 @@ export interface ImplementWorkflowContext extends BaseWorkflowContext {
   lastError: string | null;
   failedPhase: ImplementPhase | null;
 }
+
+// Re-export ReviewResult and ReviewerName for convenience
+export type { ReviewResult, ReviewerName };

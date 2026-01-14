@@ -8,69 +8,24 @@
  */
 
 import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import type { ReviewerType } from './types.js';
-
-export interface ReviewerBackendConfig {
-  // Gemini configuration
-  gemini?: {
-    model?: string;
-    useDocker?: boolean;
-  };
-
-  // Ollama configuration
-  ollama?: {
-    baseUrl?: string;
-    model?: string;
-  };
-
-  // OpenRouter configuration
-  openrouter?: {
-    endpoint?: string;
-    model?: string;
-    temperature?: number;
-  };
-
-  // GitHub Models configuration
-  'github-models'?: {
-    endpoint?: string;
-    model?: string;
-    temperature?: number;
-  };
-}
-
-export interface ReviewerConfig {
-  // Which reviewers to use (in order)
-  reviewers: ReviewerType[];
-
-  // Backend-specific configuration
-  backends: ReviewerBackendConfig;
-}
-
-interface ConfigFile {
-  reviewers?: ReviewerType[];
-  backends?: ReviewerBackendConfig;
-}
+import type {
+  ReviewerConfig,
+  ReviewerBackendConfig,
+} from './types.js';
 
 /**
  * Default configuration
+ * Uses Ollama with OLMo model for local development (free)
  */
 const DEFAULT_CONFIG: ReviewerConfig = {
-  reviewers: ['gemini'],
-  backends: {
-    gemini: {
-      model: 'gemini-2.5-flash-lite',
-      useDocker: false,
-    },
-    ollama: {
-      baseUrl: 'http://localhost:11434',
+  activeReviewers: ['olmo-local'],
+  reviewers: {
+    'olmo-local': {
+      type: 'ollama',
       model: 'olmo-3.1:32b-think',
-    },
-    'github-models': {
-      endpoint: 'https://models.inference.ai.azure.com',
-      model: 'phi-4',
-      temperature: 0.3,
+      baseUrl: 'http://localhost:11434',
     },
   },
 };
@@ -79,57 +34,21 @@ const DEFAULT_CONFIG: ReviewerConfig = {
  * Load configuration from environment variables
  */
 function loadFromEnv(): Partial<ReviewerConfig> {
-  const config: Partial<ReviewerConfig> = {
-    backends: {},
-  };
+  const config: Partial<ReviewerConfig> = {};
 
-  // Load reviewer selection
-  const reviewersEnv = process.env.REVIEWERS;
-  if (reviewersEnv) {
-    config.reviewers = reviewersEnv.split(',').map(r => r.trim() as ReviewerType);
+  // Load active reviewers list
+  const activeReviewersEnv = process.env.ACTIVE_REVIEWERS;
+  if (activeReviewersEnv) {
+    config.activeReviewers = activeReviewersEnv.split(',').map(r => r.trim());
   }
 
-  // Load Gemini config
-  const geminiModel = process.env.GEMINI_MODEL;
-  if (geminiModel) {
-    config.backends!.gemini = {
-      ...config.backends!.gemini,
-      model: geminiModel,
-    };
-  }
+  // Individual reviewer configs can be set via environment variables
+  // Format: REVIEWER_<NAME>_TYPE, REVIEWER_<NAME>_MODEL, etc.
+  // This is mainly for CI flexibility
 
-  // Load Ollama config
-  const ollamaModel = process.env.OLLAMA_MODEL;
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
-  if (ollamaModel || ollamaBaseUrl) {
-    config.backends!.ollama = {
-      ...config.backends!.ollama,
-      ...(ollamaModel && { model: ollamaModel }),
-      ...(ollamaBaseUrl && { baseUrl: ollamaBaseUrl }),
-    };
-  }
-
-  // Load OpenRouter config
-  const openrouterModel = process.env.OPENROUTER_MODEL;
-  const openrouterEndpoint = process.env.OPENROUTER_ENDPOINT;
-  if (openrouterModel || openrouterEndpoint) {
-    config.backends!.openrouter = {
-      ...config.backends!.openrouter,
-      ...(openrouterModel && { model: openrouterModel }),
-      ...(openrouterEndpoint && { endpoint: openrouterEndpoint }),
-    };
-  }
-
-  // Load GitHub Models config
-  const githubModelsModel = process.env.GITHUB_MODELS_MODEL;
-  const githubModelsEndpoint = process.env.GITHUB_MODELS_ENDPOINT;
-  if (githubModelsModel || githubModelsEndpoint) {
-    config.backends!['github-models'] = {
-      ...config.backends!['github-models'],
-      ...(githubModelsModel && { model: githubModelsModel }),
-      ...(githubModelsEndpoint && { endpoint: githubModelsEndpoint }),
-    };
-  }
+  // Quick override for common CI patterns:
+  // If OPENROUTER_API_KEY is set and ACTIVE_REVIEWERS includes a reviewer
+  // that uses openrouter, the API key will be used automatically
 
   return config;
 }
@@ -146,12 +65,23 @@ async function loadFromFile(projectPath: string): Promise<Partial<ReviewerConfig
 
   try {
     const content = await readFile(configPath, 'utf-8');
-    const fileConfig: ConfigFile = JSON.parse(content);
+    const fileConfig = JSON.parse(content) as Partial<ReviewerConfig>;
 
-    return {
-      reviewers: fileConfig.reviewers,
-      backends: fileConfig.backends,
-    };
+    // Validate the config has the new format
+    if (fileConfig.activeReviewers && fileConfig.reviewers) {
+      return fileConfig;
+    }
+
+    // If old format detected, warn and return empty
+    if ('backends' in fileConfig) {
+      console.warn(
+        `⚠️  Old reviewer config format detected in ${configPath}.\n` +
+        `   Please update to the new format. See docs/REVIEWERS.md for details.`
+      );
+      return {};
+    }
+
+    return fileConfig;
   } catch (error) {
     console.warn(`Failed to load reviewer config from ${configPath}:`, error);
     return {};
@@ -159,26 +89,62 @@ async function loadFromFile(projectPath: string): Promise<Partial<ReviewerConfig
 }
 
 /**
- * Deep merge configuration objects
+ * Load configuration from file (synchronous version)
+ */
+function loadFromFileSync(projectPath: string): Partial<ReviewerConfig> {
+  const configPath = join(projectPath, '.devtools', 'reviewers.config.json');
+
+  if (!existsSync(configPath)) {
+    return {};
+  }
+
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    const fileConfig = JSON.parse(content) as Partial<ReviewerConfig>;
+
+    // Validate the config has the new format
+    if (fileConfig.activeReviewers && fileConfig.reviewers) {
+      return fileConfig;
+    }
+
+    // If old format detected, warn and return empty
+    if ('backends' in fileConfig) {
+      console.warn(
+        `⚠️  Old reviewer config format detected in ${configPath}.\n` +
+        `   Please update to the new format. See docs/REVIEWERS.md for details.`
+      );
+      return {};
+    }
+
+    return fileConfig;
+  } catch (error) {
+    console.warn(`Failed to load reviewer config from ${configPath}:`, error);
+    return {};
+  }
+}
+
+/**
+ * Merge configuration objects
+ * Later configs override earlier ones
  */
 function mergeConfig(...configs: Partial<ReviewerConfig>[]): ReviewerConfig {
   const result: ReviewerConfig = {
-    reviewers: DEFAULT_CONFIG.reviewers,
-    backends: { ...DEFAULT_CONFIG.backends },
+    activeReviewers: [...DEFAULT_CONFIG.activeReviewers],
+    reviewers: { ...DEFAULT_CONFIG.reviewers },
   };
 
   for (const config of configs) {
-    if (config.reviewers) {
-      result.reviewers = config.reviewers;
+    if (config.activeReviewers) {
+      result.activeReviewers = config.activeReviewers;
     }
 
-    if (config.backends) {
-      // Merge backend configs
-      for (const [backend, backendConfig] of Object.entries(config.backends)) {
-        result.backends[backend as keyof ReviewerBackendConfig] = {
-          ...result.backends[backend as keyof ReviewerBackendConfig],
-          ...backendConfig,
-        };
+    if (config.reviewers) {
+      // Merge reviewer configs - new entries override existing
+      for (const [reviewerName, reviewerConfig] of Object.entries(config.reviewers)) {
+        result.reviewers[reviewerName] = {
+          ...result.reviewers[reviewerName],
+          ...reviewerConfig,
+        } as ReviewerBackendConfig;
       }
     }
   }
@@ -195,17 +161,25 @@ function mergeConfig(...configs: Partial<ReviewerConfig>[]): ReviewerConfig {
  * 3. Defaults (lowest priority)
  */
 export async function loadReviewerConfig(projectPath: string = '.'): Promise<ReviewerConfig> {
-  const envConfig = loadFromEnv();
   const fileConfig = await loadFromFile(projectPath);
+  const envConfig = loadFromEnv();
 
   return mergeConfig(fileConfig, envConfig);
 }
 
 /**
  * Synchronous version for cases where async loading isn't possible
- * (only uses env vars and defaults, skips config file)
  */
-export function loadReviewerConfigSync(): ReviewerConfig {
+export function loadReviewerConfigSync(projectPath: string = '.'): ReviewerConfig {
+  const fileConfig = loadFromFileSync(projectPath);
   const envConfig = loadFromEnv();
-  return mergeConfig(envConfig);
+
+  return mergeConfig(fileConfig, envConfig);
+}
+
+/**
+ * Get default configuration (useful for testing)
+ */
+export function getDefaultConfig(): ReviewerConfig {
+  return { ...DEFAULT_CONFIG };
 }
