@@ -12,7 +12,7 @@
     },
     "gemini-local": {
       "type": "ollama",
-      "model": "gemini-3-flash-preview",
+      "model": "gemini-3-flash-preview:latest",
       "baseUrl": "http://localhost:11434"
     },
     "olmo-cloud": {

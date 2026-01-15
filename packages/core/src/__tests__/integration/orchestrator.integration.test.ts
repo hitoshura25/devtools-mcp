@@ -72,6 +72,44 @@ function logTiming(label: string, startTime: number) {
   console.log(`${label} (${duration}s)`);
 }
 
+/**
+ * Execute a command with progress indicator
+ * Shows elapsed time every 15 seconds while waiting for long-running operations
+ * Uses process.stderr.write which is unbuffered (unlike console.log which vitest buffers)
+ */
+async function execWithProgress(
+  command: string,
+  label: string,
+  options: { timeout: number; maxBuffer: number }
+): Promise<{ stdout: string; stderr: string }> {
+  const startTime = Date.now();
+  let progressInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Progress output function - writes directly to stderr (unbuffered)
+  const logProgress = (message: string) => {
+    process.stderr.write(`${message}\n`);
+  };
+
+  // Start progress indicator (every 15 seconds)
+  if (VERBOSE) {
+    logProgress(`   ⏳ ${label} - sending request to model...`);
+
+    progressInterval = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      logProgress(`   ⏳ ${label} - still waiting... ${elapsed}s elapsed`);
+    }, 15000); // Every 15 seconds
+  }
+
+  try {
+    const result = await execAsync(command, options);
+    return result;
+  } finally {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+    }
+  }
+}
+
 // =============================================================================
 // Backend Availability Detection
 // =============================================================================
@@ -111,7 +149,7 @@ const backendAvailability: Record<string, boolean> = {
 
 // Get active reviewers from environment (new format) or default
 // Format: ACTIVE_REVIEWERS=olmo-local,gemini-local
-const activeReviewers = process.env.ACTIVE_REVIEWERS?.split(',').map(r => r.trim()) || ['olmo-local'];
+const activeReviewers = process.env.ACTIVE_REVIEWERS?.split(',').map(r => r.trim()) || ['olmo-local', 'gemini-local'];
 
 // Determine which backend each reviewer uses (from the config)
 // For tests, we infer from reviewer name patterns:
@@ -394,11 +432,15 @@ Use standard theme switching with preference storage.
         expect(currentAction.command).toMatch(/openrouter\.ai/);
       }
 
-      // Execute the review command
-      const { stdout: reviewOutput } = await execAsync(currentAction.command, {
-        timeout: 300000, // 5 minutes for large model
-        maxBuffer: 1024 * 1024 * 10,
-      });
+      // Execute the review command with progress indicator
+      const { stdout: reviewOutput } = await execWithProgress(
+        currentAction.command,
+        currentReviewer,
+        {
+          timeout: 300000, // 5 minutes for large model
+          maxBuffer: 1024 * 1024 * 10,
+        }
+      );
 
       expect(reviewOutput).toBeDefined();
       logResponse(currentReviewer, reviewOutput);

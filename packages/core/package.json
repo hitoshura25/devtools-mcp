@@ -24,6 +24,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:integration": "vitest run src/__tests__/integration",
+    "test:integration:verbose": "TEST_VERBOSE=true vitest run src/__tests__/integration --reporter=basic",
     "test:watch": "vitest",
     "lint": "eslint src/",
     "clean": "rm -rf dist *.tsbuildinfo"

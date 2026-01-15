@@ -304,6 +304,7 @@ pnpm --filter @hitoshura25/core test:integration
 
 - **Phase transitions**: `[PHASE] spec_created -> reviews_pending`
 - **Commands**: Full curl commands being executed (truncated for readability)
+- **Progress indicator**: Elapsed time updates every 10 seconds while waiting for model response
 - **Responses**: AI model outputs (first 1000 chars)
 - **Timing**: Duration for each reviewer execution
 
@@ -320,6 +321,10 @@ curl -s http://localhost:11434/v1/chat/completions -H "Content-Type: application
 └────────────────────────────────────────────────────────────────
 
 🤖 Executing olmo-local review (ollama backend)...
+   ⏳ olmo-local - sending request to model...
+   ⏳ olmo-local - waiting for response... 10s
+   ⏳ olmo-local - waiting for response... 20s
+   ⏳ olmo-local - waiting for response... 30s
 
 ┌─ Response from olmo-local ────────────────────────────────
 {"choices":[{"message":{"content":"{\"approved\":true...
@@ -329,6 +334,7 @@ curl -s http://localhost:11434/v1/chat/completions -H "Content-Type: application
 
 [PHASE] reviews_pending -> reviews_pending
 🤖 Executing gemini-local review (ollama backend)...
+   ⏳ gemini-local - sending request to model...
 
 ✅ gemini-local review received (12.3s)
 
