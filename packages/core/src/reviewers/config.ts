@@ -1,185 +1,244 @@
 /**
  * Configuration loader for reviewer backends
  *
- * Priority order:
- * 1. Environment variables (highest)
- * 2. Config file (.devtools/reviewers.config.json)
- * 3. Default values (lowest)
+ * FAIL FAST: No default configuration. The .devtools/reviewers.config.json
+ * file MUST exist and be valid, otherwise we throw an error.
+ *
+ * Priority order for overrides:
+ * 1. Environment variables (highest) - can override activeReviewers
+ * 2. Config file (.devtools/reviewers.config.json) - required
  */
 
 import { readFile } from 'fs/promises';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname, resolve } from 'path';
 import type {
   ReviewerConfig,
-  ReviewerBackendConfig,
 } from './types.js';
 
 /**
- * Default configuration
- * Uses Ollama with OLMo model for local development (free)
+ * Find the .devtools directory by searching up from the start path
+ * Similar to how git finds .git directory
  */
-const DEFAULT_CONFIG: ReviewerConfig = {
-  activeReviewers: ['olmo-local'],
-  reviewers: {
-    'olmo-local': {
-      type: 'ollama',
-      model: 'olmo-3.1:32b-think',
-      baseUrl: 'http://localhost:11434',
-    },
-  },
-};
+function findDevtoolsDir(startPath: string): string | null {
+  let currentPath = resolve(startPath);
 
-/**
- * Load configuration from environment variables
- */
-function loadFromEnv(): Partial<ReviewerConfig> {
-  const config: Partial<ReviewerConfig> = {};
+  // Walk up the directory tree until we hit the filesystem root
+  while (true) {
+    const devtoolsPath = join(currentPath, '.devtools');
+    if (existsSync(devtoolsPath)) {
+      return currentPath;
+    }
 
-  // Load active reviewers list
-  const activeReviewersEnv = process.env.ACTIVE_REVIEWERS;
-  if (activeReviewersEnv) {
-    config.activeReviewers = activeReviewersEnv.split(',').map(r => r.trim());
+    const parentPath = dirname(currentPath);
+    if (parentPath === currentPath) {
+      // Reached filesystem root
+      break;
+    }
+    currentPath = parentPath;
   }
 
-  // Individual reviewer configs can be set via environment variables
-  // Format: REVIEWER_<NAME>_TYPE, REVIEWER_<NAME>_MODEL, etc.
-  // This is mainly for CI flexibility
-
-  // Quick override for common CI patterns:
-  // If OPENROUTER_API_KEY is set and ACTIVE_REVIEWERS includes a reviewer
-  // that uses openrouter, the API key will be used automatically
-
-  return config;
+  return null;
 }
 
 /**
- * Load configuration from file
+ * Load configuration from environment variables
+ * Only used to override activeReviewers from the config file
  */
-async function loadFromFile(projectPath: string): Promise<Partial<ReviewerConfig>> {
-  const configPath = join(projectPath, '.devtools', 'reviewers.config.json');
+function loadEnvOverrides(): Partial<ReviewerConfig> {
+  const overrides: Partial<ReviewerConfig> = {};
+
+  // Load active reviewers list override
+  const activeReviewersEnv = process.env.ACTIVE_REVIEWERS;
+  if (activeReviewersEnv) {
+    overrides.activeReviewers = activeReviewersEnv.split(',').map(r => r.trim());
+  }
+
+  return overrides;
+}
+
+/**
+ * Load configuration from file (async version)
+ * Searches up from projectPath to find .devtools directory
+ * THROWS if config file is not found or invalid
+ */
+async function loadFromFile(projectPath: string): Promise<ReviewerConfig> {
+  // Find .devtools directory by searching up the tree
+  const devtoolsRoot = findDevtoolsDir(projectPath);
+  if (!devtoolsRoot) {
+    throw new Error(
+      `Could not find .devtools directory.\n` +
+      `Searched from: ${resolve(projectPath)}\n` +
+      `Create .devtools/reviewers.config.json with your reviewer configuration.\n` +
+      `See docs/REVIEWERS.md for details.`
+    );
+  }
+
+  const configPath = join(devtoolsRoot, '.devtools', 'reviewers.config.json');
 
   if (!existsSync(configPath)) {
-    return {};
+    throw new Error(
+      `Reviewer config file not found: ${configPath}\n` +
+      `Create this file with your reviewer configuration.\n` +
+      `See docs/REVIEWERS.md for details.`
+    );
   }
 
   try {
     const content = await readFile(configPath, 'utf-8');
-    const fileConfig = JSON.parse(content) as Partial<ReviewerConfig>;
+    const fileConfig = JSON.parse(content) as ReviewerConfig;
 
-    // Validate the config has the new format
-    if (fileConfig.activeReviewers && fileConfig.reviewers) {
-      return fileConfig;
+    // Validate required fields
+    if (!fileConfig.activeReviewers || !Array.isArray(fileConfig.activeReviewers)) {
+      throw new Error(
+        `Invalid config: 'activeReviewers' array is required in ${configPath}`
+      );
     }
 
-    // If old format detected, warn and return empty
-    if ('backends' in fileConfig) {
-      console.warn(
-        `⚠️  Old reviewer config format detected in ${configPath}.\n` +
-        `   Please update to the new format. See docs/REVIEWERS.md for details.`
+    if (!fileConfig.reviewers || typeof fileConfig.reviewers !== 'object') {
+      throw new Error(
+        `Invalid config: 'reviewers' object is required in ${configPath}`
       );
-      return {};
+    }
+
+    // Validate all active reviewers have configurations
+    for (const reviewerName of fileConfig.activeReviewers) {
+      if (!fileConfig.reviewers[reviewerName]) {
+        throw new Error(
+          `Invalid config: Active reviewer '${reviewerName}' is not defined in reviewers section.\n` +
+          `Available reviewers: ${Object.keys(fileConfig.reviewers).join(', ')}`
+        );
+      }
     }
 
     return fileConfig;
   } catch (error) {
-    console.warn(`Failed to load reviewer config from ${configPath}:`, error);
-    return {};
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Failed to parse reviewer config at ${configPath}: Invalid JSON\n` +
+        `${error.message}`
+      );
+    }
+    throw error;
   }
 }
 
 /**
  * Load configuration from file (synchronous version)
+ * Searches up from projectPath to find .devtools directory
+ * THROWS if config file is not found or invalid
  */
-function loadFromFileSync(projectPath: string): Partial<ReviewerConfig> {
-  const configPath = join(projectPath, '.devtools', 'reviewers.config.json');
+function loadFromFileSync(projectPath: string): ReviewerConfig {
+  // Find .devtools directory by searching up the tree
+  const devtoolsRoot = findDevtoolsDir(projectPath);
+  if (!devtoolsRoot) {
+    throw new Error(
+      `Could not find .devtools directory.\n` +
+      `Searched from: ${resolve(projectPath)}\n` +
+      `Create .devtools/reviewers.config.json with your reviewer configuration.\n` +
+      `See docs/REVIEWERS.md for details.`
+    );
+  }
+
+  const configPath = join(devtoolsRoot, '.devtools', 'reviewers.config.json');
 
   if (!existsSync(configPath)) {
-    return {};
+    throw new Error(
+      `Reviewer config file not found: ${configPath}\n` +
+      `Create this file with your reviewer configuration.\n` +
+      `See docs/REVIEWERS.md for details.`
+    );
   }
 
   try {
     const content = readFileSync(configPath, 'utf-8');
-    const fileConfig = JSON.parse(content) as Partial<ReviewerConfig>;
+    const fileConfig = JSON.parse(content) as ReviewerConfig;
 
-    // Validate the config has the new format
-    if (fileConfig.activeReviewers && fileConfig.reviewers) {
-      return fileConfig;
+    // Validate required fields
+    if (!fileConfig.activeReviewers || !Array.isArray(fileConfig.activeReviewers)) {
+      throw new Error(
+        `Invalid config: 'activeReviewers' array is required in ${configPath}`
+      );
     }
 
-    // If old format detected, warn and return empty
-    if ('backends' in fileConfig) {
-      console.warn(
-        `⚠️  Old reviewer config format detected in ${configPath}.\n` +
-        `   Please update to the new format. See docs/REVIEWERS.md for details.`
+    if (!fileConfig.reviewers || typeof fileConfig.reviewers !== 'object') {
+      throw new Error(
+        `Invalid config: 'reviewers' object is required in ${configPath}`
       );
-      return {};
+    }
+
+    // Validate all active reviewers have configurations
+    for (const reviewerName of fileConfig.activeReviewers) {
+      if (!fileConfig.reviewers[reviewerName]) {
+        throw new Error(
+          `Invalid config: Active reviewer '${reviewerName}' is not defined in reviewers section.\n` +
+          `Available reviewers: ${Object.keys(fileConfig.reviewers).join(', ')}`
+        );
+      }
     }
 
     return fileConfig;
   } catch (error) {
-    console.warn(`Failed to load reviewer config from ${configPath}:`, error);
-    return {};
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Failed to parse reviewer config at ${configPath}: Invalid JSON\n` +
+        `${error.message}`
+      );
+    }
+    throw error;
   }
 }
 
 /**
- * Merge configuration objects
- * Later configs override earlier ones
+ * Apply environment variable overrides to config
  */
-function mergeConfig(...configs: Partial<ReviewerConfig>[]): ReviewerConfig {
-  const result: ReviewerConfig = {
-    activeReviewers: [...DEFAULT_CONFIG.activeReviewers],
-    reviewers: { ...DEFAULT_CONFIG.reviewers },
-  };
+function applyEnvOverrides(config: ReviewerConfig): ReviewerConfig {
+  const overrides = loadEnvOverrides();
 
-  for (const config of configs) {
-    if (config.activeReviewers) {
-      result.activeReviewers = config.activeReviewers;
-    }
-
-    if (config.reviewers) {
-      // Merge reviewer configs - new entries override existing
-      for (const [reviewerName, reviewerConfig] of Object.entries(config.reviewers)) {
-        result.reviewers[reviewerName] = {
-          ...result.reviewers[reviewerName],
-          ...reviewerConfig,
-        } as ReviewerBackendConfig;
+  if (overrides.activeReviewers) {
+    // Validate that all overridden reviewers exist in the config
+    for (const reviewerName of overrides.activeReviewers) {
+      if (!config.reviewers[reviewerName]) {
+        throw new Error(
+          `Environment override error: ACTIVE_REVIEWERS contains '${reviewerName}' ` +
+          `which is not defined in the config file.\n` +
+          `Available reviewers: ${Object.keys(config.reviewers).join(', ')}`
+        );
       }
     }
+    return {
+      ...config,
+      activeReviewers: overrides.activeReviewers,
+    };
   }
 
-  return result;
+  return config;
 }
 
 /**
- * Load reviewer configuration from all sources
+ * Load reviewer configuration
  *
- * Priority order:
- * 1. Environment variables (highest priority)
- * 2. Config file
- * 3. Defaults (lowest priority)
+ * THROWS if:
+ * - .devtools directory not found
+ * - reviewers.config.json not found
+ * - Config is invalid or missing required fields
+ * - ACTIVE_REVIEWERS env var references undefined reviewers
  */
 export async function loadReviewerConfig(projectPath: string = '.'): Promise<ReviewerConfig> {
   const fileConfig = await loadFromFile(projectPath);
-  const envConfig = loadFromEnv();
-
-  return mergeConfig(fileConfig, envConfig);
+  return applyEnvOverrides(fileConfig);
 }
 
 /**
  * Synchronous version for cases where async loading isn't possible
+ *
+ * THROWS if:
+ * - .devtools directory not found
+ * - reviewers.config.json not found
+ * - Config is invalid or missing required fields
+ * - ACTIVE_REVIEWERS env var references undefined reviewers
  */
 export function loadReviewerConfigSync(projectPath: string = '.'): ReviewerConfig {
   const fileConfig = loadFromFileSync(projectPath);
-  const envConfig = loadFromEnv();
-
-  return mergeConfig(fileConfig, envConfig);
-}
-
-/**
- * Get default configuration (useful for testing)
- */
-export function getDefaultConfig(): ReviewerConfig {
-  return { ...DEFAULT_CONFIG };
+  return applyEnvOverrides(fileConfig);
 }
