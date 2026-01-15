@@ -26,8 +26,11 @@ This allows you to:
 # macOS: brew install ollama
 # Linux: curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull OLMo model
+# Pull OLMo model (primary reviewer)
 ollama pull olmo-3.1:32b-think
+
+# Pull Gemini model (secondary reviewer, optional)
+ollama pull gemini-3-flash-preview
 
 # Start server
 ollama serve
@@ -36,7 +39,8 @@ ollama serve
 **Cost:** Free (local compute only)
 
 **Requirements:**
-- 20-30 GB RAM for 32B model
+- 20-30 GB RAM for OLMo 32B model
+- Gemini Flash is lighter weight (faster, less RAM)
 - 20 GB disk space
 
 ---
@@ -103,11 +107,16 @@ Create `.devtools/reviewers.config.json`:
 
 ```json
 {
-  "activeReviewers": ["olmo-local"],
+  "activeReviewers": ["olmo-local", "gemini-local"],
   "reviewers": {
     "olmo-local": {
       "type": "ollama",
       "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
+    },
+    "gemini-local": {
+      "type": "ollama",
+      "model": "gemini-3-flash-preview",
       "baseUrl": "http://localhost:11434"
     },
     "olmo-cloud": {
@@ -163,17 +172,22 @@ export OPENROUTER_API_KEY=your_key
 
 ### Option B: Free Local + Paid CI ⭐ Recommended
 
-**Local:** Free with Ollama
+**Local:** Free with Ollama (dual reviewers)
 **CI:** Paid with OpenRouter
 
 **.devtools/reviewers.config.json:**
 ```json
 {
-  "activeReviewers": ["olmo-local"],
+  "activeReviewers": ["olmo-local", "gemini-local"],
   "reviewers": {
     "olmo-local": {
       "type": "ollama",
       "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
+    },
+    "gemini-local": {
+      "type": "ollama",
+      "model": "gemini-3-flash-preview",
       "baseUrl": "http://localhost:11434"
     },
     "olmo-cloud": {
@@ -194,9 +208,9 @@ env:
 **Cost:** ~$0.08/month (CI only)
 
 **Advantages:**
-- ✅ Free local development
+- ✅ Free local development with dual reviewers
 - ✅ Minimal CI cost
-- ✅ Same OLMo model everywhere
+- ✅ Multi-perspective reviews locally
 
 ---
 
@@ -206,15 +220,15 @@ Run multiple reviewers for comprehensive validation:
 
 ```json
 {
-  "activeReviewers": ["olmo-local", "olmo-cloud"],
+  "activeReviewers": ["olmo-local", "gemini-local"],
   "reviewers": {
     "olmo-local": {
       "type": "ollama",
       "model": "olmo-3.1:32b-think"
     },
-    "olmo-cloud": {
-      "type": "openrouter",
-      "model": "allenai/olmo-3.1-32b-think"
+    "gemini-local": {
+      "type": "ollama",
+      "model": "gemini-3-flash-preview"
     }
   }
 }
@@ -237,10 +251,11 @@ Run multiple reviewers for comprehensive validation:
 | Reviewer Config | Backend | Model | Cost per Review | Monthly (200 reviews) |
 |-----------------|---------|-------|----------------|---------------------|
 | `olmo-local` | Ollama | OLMo 3.1 32B | $0 | $0 |
+| `gemini-local` | Ollama | Gemini 3 Flash | $0 | $0 |
 | `olmo-cloud` | OpenRouter | OLMo 3.1 32B | $0.0004 | **$0.08** |
 | `phi4-github` | GitHub Models | Phi-4 | Varies | Varies |
 
-**Recommendation:** Option B (Ollama local + OpenRouter CI) for optimal cost/benefit
+**Recommendation:** Option B (Ollama local with dual reviewers + OpenRouter CI) for optimal cost/benefit
 
 ---
 
@@ -265,6 +280,60 @@ Run multiple reviewers for comprehensive validation:
 - ✅ Want to avoid managing additional API keys
 - ✅ Need access to multiple model providers
 - ✅ Prefer GitHub-native solutions
+
+---
+
+## Testing with Verbose Output
+
+Integration tests support verbose logging to see command executions and AI responses in real-time.
+
+### Enable Verbose Mode
+
+```bash
+# Run with verbose output
+TEST_VERBOSE=true pnpm --filter @hitoshura25/core test:integration
+
+# Alternative: Use DEBUG flag
+DEBUG=true pnpm --filter @hitoshura25/core test:integration
+
+# Normal (minimal output)
+pnpm --filter @hitoshura25/core test:integration
+```
+
+### What Verbose Mode Shows
+
+- **Phase transitions**: `[PHASE] spec_created -> reviews_pending`
+- **Commands**: Full curl commands being executed (truncated for readability)
+- **Responses**: AI model outputs (first 1000 chars)
+- **Timing**: Duration for each reviewer execution
+
+### Example Verbose Output
+
+```
+🚀 Starting workflow with reviewers: olmo-local, gemini-local
+
+[PHASE] initialized -> spec_created
+[PHASE] spec_created -> reviews_pending
+
+┌─ Command ─────────────────────────────────────────────────────
+curl -s http://localhost:11434/v1/chat/completions -H "Content-Type: application/json"...
+└────────────────────────────────────────────────────────────────
+
+🤖 Executing olmo-local review (ollama backend)...
+
+┌─ Response from olmo-local ────────────────────────────────
+{"choices":[{"message":{"content":"{\"approved\":true...
+└────────────────────────────────────────────────────────────────
+
+✅ olmo-local review received (45.2s)
+
+[PHASE] reviews_pending -> reviews_pending
+🤖 Executing gemini-local review (ollama backend)...
+
+✅ gemini-local review received (12.3s)
+
+[PHASE] reviews_pending -> reviews_complete
+```
 
 ---
 

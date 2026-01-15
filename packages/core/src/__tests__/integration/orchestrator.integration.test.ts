@@ -6,6 +6,10 @@
  * - ReviewerName: User-defined string (e.g., "olmo-local", "olmo-cloud")
  * - BackendType: Infrastructure provider ("ollama", "openrouter", "github-models")
  * - Config maps reviewer names to their backend configurations
+ *
+ * Verbose Mode:
+ * - Set TEST_VERBOSE=true or DEBUG=true for detailed output
+ * - Shows commands, responses, phase transitions, and timing
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -18,15 +22,79 @@ import { existsSync } from 'fs';
 
 const execAsync = promisify(exec);
 
-// Check for Ollama backend synchronously
-let hasOllamaBackend = false;
+// =============================================================================
+// Verbose Logging Helpers
+// =============================================================================
+
+const VERBOSE = process.env.TEST_VERBOSE === 'true' || process.env.DEBUG === 'true';
+
+function log(message: string, data?: unknown) {
+  if (VERBOSE) {
+    console.log(`[TEST] ${message}`);
+    if (data !== undefined) {
+      console.log(JSON.stringify(data, null, 2));
+    }
+  }
+}
+
+function logPhase(from: string, to: string) {
+  if (VERBOSE) {
+    console.log(`\n[PHASE] ${from} -> ${to}`);
+  }
+}
+
+function logCommand(command: string) {
+  if (VERBOSE) {
+    console.log('\n┌─ Command ─────────────────────────────────────────────────────');
+    // Truncate very long commands for readability
+    const displayCmd = command.length > 500
+      ? command.slice(0, 500) + '\n...[truncated]'
+      : command;
+    console.log(displayCmd);
+    console.log('└────────────────────────────────────────────────────────────────\n');
+  }
+}
+
+function logResponse(reviewerName: string, output: string) {
+  if (VERBOSE) {
+    console.log(`\n┌─ Response from ${reviewerName} ────────────────────────────────`);
+    // Show first 1000 chars of response
+    const displayOutput = output.length > 1000
+      ? output.slice(0, 1000) + '\n...[truncated]'
+      : output;
+    console.log(displayOutput);
+    console.log('└────────────────────────────────────────────────────────────────\n');
+  }
+}
+
+function logTiming(label: string, startTime: number) {
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`${label} (${duration}s)`);
+}
+
+// =============================================================================
+// Backend Availability Detection
+// =============================================================================
+
+// Check for available Ollama models
+interface OllamaModel {
+  name: string;
+}
+
+let availableOllamaModels: string[] = [];
 try {
   const output = execSync('curl -s http://localhost:11434/api/tags', { timeout: 5000, encoding: 'utf-8' });
   const tags = JSON.parse(output);
-  hasOllamaBackend = tags.models?.some((m: { name: string }) => m.name.includes('olmo'));
+  availableOllamaModels = tags.models?.map((m: OllamaModel) => m.name) || [];
+  log('Available Ollama models:', availableOllamaModels);
 } catch {
-  hasOllamaBackend = false;
+  availableOllamaModels = [];
 }
+
+// Check which specific models are available
+const hasOlmoModel = availableOllamaModels.some(m => m.includes('olmo'));
+const hasGeminiModel = availableOllamaModels.some(m => m.includes('gemini'));
+const hasOllamaBackend = availableOllamaModels.length > 0;
 
 // Check for OpenRouter backend (API key present)
 const hasOpenRouterBackend = !!process.env.OPENROUTER_API_KEY;
@@ -42,14 +110,14 @@ const backendAvailability: Record<string, boolean> = {
 };
 
 // Get active reviewers from environment (new format) or default
-// Format: ACTIVE_REVIEWERS=olmo-local,olmo-cloud
+// Format: ACTIVE_REVIEWERS=olmo-local,gemini-local
 const activeReviewers = process.env.ACTIVE_REVIEWERS?.split(',').map(r => r.trim()) || ['olmo-local'];
 
 // Determine which backend each reviewer uses (from the config)
 // For tests, we infer from reviewer name patterns:
-// - "olmo-local" -> ollama backend
-// - "olmo-cloud" -> openrouter backend
-// - "*-github" or "phi4-github" -> github-models backend
+// - "*-local" or "*-ollama" -> ollama backend
+// - "*-cloud" or "*-openrouter" -> openrouter backend
+// - "*-github" or "phi*" -> github-models backend
 function inferBackendType(reviewerName: string): string {
   if (reviewerName.includes('-local') || reviewerName.endsWith('-ollama')) {
     return 'ollama';
@@ -64,11 +132,29 @@ function inferBackendType(reviewerName: string): string {
   return 'ollama';
 }
 
-// Check if all configured reviewers have available backends
-const canRunTests = activeReviewers.every(reviewer => {
-  const backend = inferBackendType(reviewer);
-  return backendAvailability[backend] ?? false;
-});
+// Check if specific reviewer's model is available
+function isReviewerAvailable(reviewerName: string): boolean {
+  const backend = inferBackendType(reviewerName);
+
+  if (backend !== 'ollama') {
+    return backendAvailability[backend] ?? false;
+  }
+
+  // For ollama backend, check if the specific model is available
+  if (reviewerName.includes('olmo')) {
+    return hasOlmoModel;
+  }
+  if (reviewerName.includes('gemini')) {
+    return hasGeminiModel;
+  }
+
+  // Default: just check ollama is running
+  return hasOllamaBackend;
+}
+
+// Check if all configured reviewers are available
+const unavailableReviewers = activeReviewers.filter(r => !isReviewerAvailable(r));
+const canRunTests = unavailableReviewers.length === 0;
 
 // Use describe.skip if prerequisites not met
 const describeIntegration = canRunTests ? describe : describe.skip;
@@ -78,16 +164,24 @@ if (!canRunTests) {
   const skipReasons: string[] = [];
   const missingBackends = new Set<string>();
 
-  activeReviewers.forEach(reviewer => {
+  unavailableReviewers.forEach(reviewer => {
     const backend = inferBackendType(reviewer);
-    if (!backendAvailability[backend]) {
-      missingBackends.add(backend);
+    missingBackends.add(backend);
+
+    if (backend === 'ollama') {
+      if (reviewer.includes('olmo') && !hasOlmoModel) {
+        skipReasons.push(`   Reviewer '${reviewer}' requires OLMo model:`);
+        skipReasons.push('     ollama pull olmo-3.1:32b-think');
+      }
+      if (reviewer.includes('gemini') && !hasGeminiModel) {
+        skipReasons.push(`   Reviewer '${reviewer}' requires Gemini model:`);
+        skipReasons.push('     ollama pull gemini-3-flash-preview');
+      }
     }
   });
 
-  if (missingBackends.has('ollama')) {
-    skipReasons.push('   Install Ollama with OLMo model:');
-    skipReasons.push('     ollama pull olmo-3.1:32b-think');
+  if (missingBackends.has('ollama') && !hasOllamaBackend) {
+    skipReasons.push('   Start Ollama server:');
     skipReasons.push('     ollama serve');
   }
   if (missingBackends.has('openrouter')) {
@@ -98,18 +192,29 @@ if (!canRunTests) {
   if (missingBackends.has('github-models')) {
     skipReasons.push('   Set up GitHub Models API:');
     skipReasons.push('     export GITHUB_TOKEN=your_personal_access_token');
-    skipReasons.push('     Or in CI, use automatic ${{ secrets.GITHUB_TOKEN }}');
   }
 
   console.warn(
-    `\nℹ️  Integration tests skipped: Required backends not available.\n` +
+    `\n` +
+    `┌─────────────────────────────────────────────────────────────────┐\n` +
+    `│  Integration tests skipped: Required reviewers not available   │\n` +
+    `└─────────────────────────────────────────────────────────────────┘\n` +
+    `\n` +
     `   Active reviewers: ${activeReviewers.join(', ')}\n` +
-    `   Missing backends: ${Array.from(missingBackends).join(', ')}\n\n` +
-    '   To run integration tests, ensure:\n' +
+    `   Unavailable: ${unavailableReviewers.join(', ')}\n` +
+    `   Available Ollama models: ${availableOllamaModels.length > 0 ? availableOllamaModels.join(', ') : '(none)'}\n` +
+    `\n` +
+    `   To run integration tests:\n` +
     skipReasons.join('\n') +
-    '\n\n   Then run: pnpm test:integration\n'
+    `\n\n` +
+    `   Then run: pnpm test:integration\n` +
+    `   For verbose output: TEST_VERBOSE=true pnpm test:integration\n`
   );
 }
+
+// =============================================================================
+// Test Suite
+// =============================================================================
 
 describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => {
   const testLanguageConfig: LanguageConfig = {
@@ -135,6 +240,16 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
     }
 
     orchestrator = new ImplementOrchestrator(testLanguageConfig, reviewerRegistry);
+
+    if (VERBOSE) {
+      console.log('\n' +
+        '┌─────────────────────────────────────────────────────────────────┐\n' +
+        '│  Verbose mode enabled - showing detailed test output           │\n' +
+        '└─────────────────────────────────────────────────────────────────┘\n'
+      );
+      console.log(`Active reviewers: ${activeReviewers.join(', ')}`);
+      console.log(`Available Ollama models: ${availableOllamaModels.join(', ')}\n`);
+    }
   });
 
   afterAll(async () => {
@@ -152,16 +267,18 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
     }
   });
 
-  it('should complete workflow with configured reviewer', async () => {
-    // Use the first active reviewer for this test
-    const reviewerName = activeReviewers[0];
-    console.log(`🚀 Starting workflow with reviewer: ${reviewerName}`);
+  it('should complete workflow with all configured reviewers', async () => {
+    // Use all active reviewers for this test
+    const reviewersToTest = activeReviewers.filter(r => isReviewerAvailable(r));
+    console.log(`\n🚀 Starting workflow with reviewers: ${reviewersToTest.join(', ')}`);
 
     // Step 1: Start workflow
+    log('Starting workflow...');
+    const startTime = Date.now();
     const startResult = await orchestrator.start({
       description: 'Add dark mode toggle to settings screen',
       projectPath: '.',
-      reviewers: [reviewerName],
+      reviewers: reviewersToTest,
     });
 
     expect(startResult).toBeDefined();
@@ -172,7 +289,7 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
     specPath = startResult.action.path!;
 
     console.log(`✅ Workflow created: ${workflowId}`);
-    console.log(`   Spec path: ${specPath}`);
+    log(`Spec path: ${specPath}`);
 
     // Step 2: Create spec file
     const specContent = `# Implementation Spec: Add dark mode toggle to settings screen
@@ -239,85 +356,120 @@ Use standard theme switching with preference storage.
 
     // Step 3: Advance to spec_created phase
     const step1 = await orchestrator.step(workflowId, { success: true });
+    logPhase('initialized', step1.phase);
     expect(step1.phase).toBe('spec_created');
 
-    // Step 4: Should get review action (reviews_pending phase)
+    // Step 4: Advance to reviews_pending (or spec_refined if no reviewers)
     const step2 = await orchestrator.step(workflowId, { success: true });
+    logPhase('spec_created', step2.phase);
+
+    if (reviewersToTest.length === 0) {
+      // No reviewers - should skip to spec_refined
+      expect(step2.phase).toBe('spec_refined');
+      console.log('✅ No reviewers configured - skipped to spec_refined');
+      return;
+    }
+
     expect(step2.phase).toBe('reviews_pending');
     expect(step2.action?.type).toBe('shell');
 
-    // Step 5: Execute review command
-    const backendType = inferBackendType(reviewerName);
-    console.log(`🤖 Executing ${reviewerName} review (${backendType} backend)...`);
+    // Process each reviewer in the queue
+    let currentPhase = step2.phase;
+    let currentAction = step2.action;
+    const completedReviews: Record<string, unknown> = {};
+    let reviewerIndex = 0;
 
-    const reviewCommand = step2.action?.command;
-    expect(reviewCommand).toBeDefined();
+    while (currentPhase === 'reviews_pending' && currentAction?.command) {
+      const currentReviewer = reviewersToTest[reviewerIndex];
+      const backendType = inferBackendType(currentReviewer);
+      const reviewStartTime = Date.now();
 
-    // Verify the command matches the expected backend
-    if (backendType === 'ollama') {
-      expect(reviewCommand).toMatch(/ollama|localhost:11434/);
-    } else if (backendType === 'openrouter') {
-      expect(reviewCommand).toMatch(/openrouter\.ai/);
+      console.log(`\n🤖 Executing ${currentReviewer} review (${backendType} backend)...`);
+      logCommand(currentAction.command);
+
+      // Verify the command matches the expected backend
+      if (backendType === 'ollama') {
+        expect(currentAction.command).toMatch(/ollama|localhost:11434/);
+      } else if (backendType === 'openrouter') {
+        expect(currentAction.command).toMatch(/openrouter\.ai/);
+      }
+
+      // Execute the review command
+      const { stdout: reviewOutput } = await execAsync(currentAction.command, {
+        timeout: 300000, // 5 minutes for large model
+        maxBuffer: 1024 * 1024 * 10,
+      });
+
+      expect(reviewOutput).toBeDefined();
+      logResponse(currentReviewer, reviewOutput);
+      logTiming(`✅ ${currentReviewer} review received`, reviewStartTime);
+
+      // Submit the review result
+      const stepResult = await orchestrator.step(workflowId, {
+        success: true,
+        output: reviewOutput,
+      });
+
+      logPhase('reviews_pending', stepResult.phase);
+      currentPhase = stepResult.phase;
+      currentAction = stepResult.action;
+
+      // Track completed review
+      const status = await orchestrator.getStatus(workflowId);
+      if (status?.reviews[currentReviewer]) {
+        completedReviews[currentReviewer] = status.reviews[currentReviewer];
+      }
+
+      reviewerIndex++;
     }
 
-    const { stdout: reviewOutput } = await execAsync(reviewCommand as string, {
-      timeout: 300000, // 5 minutes for large model
-      maxBuffer: 1024 * 1024 * 10,
-    });
+    // Should now be at reviews_complete
+    expect(currentPhase).toBe('reviews_complete');
 
-    expect(reviewOutput).toBeDefined();
-    console.log(`✅ ${reviewerName} review received`);
+    // Advance to spec_refined
+    const refineStep = await orchestrator.step(workflowId, { success: true });
+    logPhase('reviews_complete', refineStep.phase);
+    expect(refineStep.phase).toBe('spec_refined');
 
-    // Step 6: Submit review - should advance to reviews_complete then spec_refined
-    const step3 = await orchestrator.step(workflowId, {
-      success: true,
-      output: reviewOutput,
-    });
+    // Verify all reviews were stored correctly
+    const finalStatus = await orchestrator.getStatus(workflowId);
+    for (const reviewerName of reviewersToTest) {
+      expect(finalStatus?.reviews[reviewerName]).toBeDefined();
+      expect(finalStatus?.reviews[reviewerName]?.reviewer).toBe(reviewerName);
+      console.log(`   ${reviewerName} approved: ${finalStatus?.reviews[reviewerName]?.approved}`);
+    }
 
-    // With single reviewer, we should go from reviews_pending -> reviews_complete
-    expect(step3.phase).toBe('reviews_complete');
+    // Verify review structure for each
+    for (const reviewerName of reviewersToTest) {
+      const review = finalStatus?.reviews[reviewerName];
+      expect(review?.feedback).toBeDefined();
+      expect(review?.suggestions).toBeInstanceOf(Array);
+      expect(review?.concerns).toBeInstanceOf(Array);
+      expect(review?.backendType).toBeDefined();
+      expect(review?.model).toBeDefined();
+    }
 
-    // Step 7: Advance to spec_refined
-    const step4 = await orchestrator.step(workflowId, { success: true });
-    expect(step4.phase).toBe('spec_refined');
-
-    // Verify review was stored with the reviewer name as key
-    const status = await orchestrator.getStatus(workflowId);
-    expect(status?.reviews[reviewerName]).toBeDefined();
-    expect(status?.reviews[reviewerName]?.reviewer).toBe(reviewerName);
-    console.log(`   ${reviewerName} approved: ${status?.reviews[reviewerName]?.approved}`);
-
-    // Verify review structure
-    const review = status?.reviews[reviewerName];
-    expect(review?.feedback).toBeDefined();
-    expect(review?.suggestions).toBeInstanceOf(Array);
-    expect(review?.concerns).toBeInstanceOf(Array);
-    expect(review?.backendType).toBeDefined();
-    expect(review?.model).toBeDefined();
-
-    // Save review to JSON file for analysis
+    // Save all reviews to JSON file for analysis
     const reviewsOutput = {
       workflowId,
       timestamp: new Date().toISOString(),
-      reviewer: reviewerName,
-      backendType: review?.backendType,
-      model: review?.model,
-      review: review,
+      reviewers: reviewersToTest,
+      reviews: finalStatus?.reviews,
     };
-    const outputPath = `src/__tests__/integration/test-output/ai-review-${reviewerName}.json`;
+    const outputPath = `src/__tests__/integration/test-output/ai-reviews-multi.json`;
     await writeFile(
       outputPath,
       JSON.stringify(reviewsOutput, null, 2),
       'utf-8'
     );
 
-    console.log(`✅ ${reviewerName} review completed and stored successfully`);
-    console.log(`📄 Review saved to: ${outputPath}`);
+    logTiming(`\n✅ All ${reviewersToTest.length} reviews completed successfully`, startTime);
+    console.log(`📄 Reviews saved to: ${outputPath}`);
 
-  }, 420000); // 7 minute timeout
+  }, 600000); // 10 minute timeout for multiple reviewers
 
   it('should skip reviews when no reviewers configured', async () => {
-    console.log('🚀 Starting workflow with no reviewers...');
+    console.log('\n🚀 Starting workflow with no reviewers...');
 
     // Start workflow with empty reviewers array
     const startResult = await orchestrator.start({
@@ -328,6 +480,7 @@ Use standard theme switching with preference storage.
 
     workflowId = startResult.workflowId;
     specPath = startResult.action.path!;
+    log(`Workflow ID: ${workflowId}`);
 
     // Create minimal spec
     const specContent = `# Implementation Spec: Add user authentication
@@ -344,10 +497,12 @@ Add basic user authentication to the app.
 
     // Advance to spec_created
     const step1 = await orchestrator.step(workflowId, { success: true });
+    logPhase('initialized', step1.phase);
     expect(step1.phase).toBe('spec_created');
 
     // With no reviewers, should skip directly to spec_refined
     const step2 = await orchestrator.step(workflowId, { success: true });
+    logPhase('spec_created', step2.phase);
     expect(step2.phase).toBe('spec_refined');
 
     const status = await orchestrator.getStatus(workflowId);

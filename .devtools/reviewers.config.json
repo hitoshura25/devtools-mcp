@@ -2,12 +2,17 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "description": "Reviewer configuration for devtools-mcp implement workflow",
 
-  "activeReviewers": ["olmo-local"],
+  "activeReviewers": ["olmo-local", "gemini-local"],
 
   "reviewers": {
     "olmo-local": {
       "type": "ollama",
       "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
+    },
+    "gemini-local": {
+      "type": "ollama",
+      "model": "gemini-3-flash-preview",
       "baseUrl": "http://localhost:11434"
     },
     "olmo-cloud": {
@@ -25,11 +30,12 @@
   },
 
   "_comments": {
-    "local_dev": "Default: activeReviewers=['olmo-local'] for free local reviews via Ollama",
+    "local_dev": "Default: activeReviewers=['olmo-local', 'gemini-local'] for dual local reviews via Ollama",
     "ci_override": "In CI: Set ACTIVE_REVIEWERS=olmo-cloud and OPENROUTER_API_KEY",
-    "multi_reviewer": "For multiple perspectives: activeReviewers=['olmo-local', 'olmo-cloud']",
+    "multi_reviewer": "For multiple perspectives: activeReviewers=['olmo-local', 'gemini-local']",
     "costs": {
       "olmo-local": "$0 (local compute, requires 20-30GB RAM)",
+      "gemini-local": "$0 (local compute, lighter than OLMo)",
       "olmo-cloud": "~$0.0004 per review (~$0.08/month for 200 reviews)",
       "phi4-github": "~$0.0005 per review (~$1/month for 200 reviews)"
     }
