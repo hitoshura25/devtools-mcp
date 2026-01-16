@@ -13,8 +13,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImplementOrchestrator, reviewerRegistry } from '@hitoshura25/core';
-import type { LanguageConfig } from '@hitoshura25/core';
+import { ImplementOrchestrator, reviewerRegistry, loadReviewerConfigSync } from '@hitoshura25/core';
+import type { LanguageConfig, ReviewerConfig } from '@hitoshura25/core';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
@@ -114,6 +114,20 @@ async function execWithProgress(
 // Backend Availability Detection
 // =============================================================================
 
+// Load the reviewer config from the config file (respects ACTIVE_REVIEWERS env override)
+let reviewerConfig: ReviewerConfig;
+try {
+  reviewerConfig = loadReviewerConfigSync('.');
+  log('Loaded reviewer config:', reviewerConfig);
+} catch (error) {
+  console.warn('Failed to load reviewer config:', error);
+  // Fallback to empty config if file not found
+  reviewerConfig = { activeReviewers: [], reviewers: {} };
+}
+
+// Get active reviewers from config (already includes ACTIVE_REVIEWERS env override)
+const activeReviewers = reviewerConfig.activeReviewers;
+
 // Check for available Ollama models
 interface OllamaModel {
   name: string;
@@ -129,9 +143,7 @@ try {
   availableOllamaModels = [];
 }
 
-// Check which specific models are available
-const hasOlmoModel = availableOllamaModels.some(m => m.includes('olmo'));
-const hasGeminiModel = availableOllamaModels.some(m => m.includes('gemini'));
+// Check if Ollama is running (has any models)
 const hasOllamaBackend = availableOllamaModels.length > 0;
 
 // Check for OpenRouter backend (API key present)
@@ -147,43 +159,36 @@ const backendAvailability: Record<string, boolean> = {
   'github-models': hasGitHubModelsBackend,
 };
 
-// Get active reviewers from environment (new format) or default
-// Format: ACTIVE_REVIEWERS=olmo-local,gemini-local
-const activeReviewers = process.env.ACTIVE_REVIEWERS?.split(',').map(r => r.trim()) || ['olmo-local', 'gemini-local'];
-
-// Determine which backend each reviewer uses (from the config)
-// For tests, we infer from reviewer name patterns:
-// - "*-local" or "*-ollama" -> ollama backend
-// - "*-cloud" or "*-openrouter" -> openrouter backend
-// - "*-github" or "phi*" -> github-models backend
-function inferBackendType(reviewerName: string): string {
-  if (reviewerName.includes('-local') || reviewerName.endsWith('-ollama')) {
-    return 'ollama';
+/**
+ * Get backend type for a reviewer from the config file
+ * Falls back to 'ollama' if reviewer not found
+ */
+function getBackendType(reviewerName: string): string {
+  const config = reviewerConfig.reviewers[reviewerName];
+  if (config) {
+    return config.type;
   }
-  if (reviewerName.includes('-cloud') || reviewerName.endsWith('-openrouter')) {
-    return 'openrouter';
-  }
-  if (reviewerName.includes('-github') || reviewerName.startsWith('phi')) {
-    return 'github-models';
-  }
-  // Default to ollama for unrecognized patterns
+  // Fallback for reviewers not in config (shouldn't happen with proper config)
+  console.warn(`Reviewer '${reviewerName}' not found in config, assuming 'ollama' backend`);
   return 'ollama';
 }
 
 // Check if specific reviewer's model is available
 function isReviewerAvailable(reviewerName: string): boolean {
-  const backend = inferBackendType(reviewerName);
+  const backend = getBackendType(reviewerName);
 
   if (backend !== 'ollama') {
     return backendAvailability[backend] ?? false;
   }
 
   // For ollama backend, check if the specific model is available
-  if (reviewerName.includes('olmo')) {
-    return hasOlmoModel;
-  }
-  if (reviewerName.includes('gemini')) {
-    return hasGeminiModel;
+  const config = reviewerConfig.reviewers[reviewerName];
+  if (config && 'model' in config) {
+    const modelName = config.model;
+    // Check if any available model matches (partial match for version suffixes)
+    return availableOllamaModels.some(m =>
+      m.includes(modelName.split(':')[0]) || modelName.includes(m.split(':')[0])
+    );
   }
 
   // Default: just check ollama is running
@@ -203,17 +208,14 @@ if (!canRunTests) {
   const missingBackends = new Set<string>();
 
   unavailableReviewers.forEach(reviewer => {
-    const backend = inferBackendType(reviewer);
+    const backend = getBackendType(reviewer);
     missingBackends.add(backend);
 
     if (backend === 'ollama') {
-      if (reviewer.includes('olmo') && !hasOlmoModel) {
-        skipReasons.push(`   Reviewer '${reviewer}' requires OLMo model:`);
-        skipReasons.push('     ollama pull olmo-3.1:32b-think');
-      }
-      if (reviewer.includes('gemini') && !hasGeminiModel) {
-        skipReasons.push(`   Reviewer '${reviewer}' requires Gemini model:`);
-        skipReasons.push('     ollama pull gemini-3-flash-preview');
+      const config = reviewerConfig.reviewers[reviewer];
+      if (config && 'model' in config) {
+        skipReasons.push(`   Reviewer '${reviewer}' requires model '${config.model}':`);
+        skipReasons.push(`     ollama pull ${config.model}`);
       }
     }
   });
@@ -223,7 +225,7 @@ if (!canRunTests) {
     skipReasons.push('     ollama serve');
   }
   if (missingBackends.has('openrouter')) {
-    skipReasons.push('   Set up OpenRouter API (for CI):');
+    skipReasons.push('   Set up OpenRouter API:');
     skipReasons.push('     Get API key from https://openrouter.ai/keys');
     skipReasons.push('     export OPENROUTER_API_KEY=your_api_key');
   }
@@ -419,7 +421,7 @@ Use standard theme switching with preference storage.
 
     while (currentPhase === 'reviews_pending' && currentAction?.command) {
       const currentReviewer = reviewersToTest[reviewerIndex];
-      const backendType = inferBackendType(currentReviewer);
+      const backendType = getBackendType(currentReviewer);
       const reviewStartTime = Date.now();
 
       console.log(`\n🤖 Executing ${currentReviewer} review (${backendType} backend)...`);
