@@ -63,10 +63,8 @@ jobs:
         run: pnpm test:integration
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
-          # Reviewer configuration - uses olmo-cloud (OpenRouter) in CI
-          # Local development uses olmo-local (Ollama, free)
-          # CI uses olmo-cloud (OpenRouter, OLMo 3.1 32B Think, ~$0.08/month)
-          ACTIVE_REVIEWERS: olmo-cloud
+          # CI uses free models via openrouter
+          ACTIVE_REVIEWERS: gemma-openrouter, nemotron-openrouter
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
   # Create Version Packages PR or Publish to npm (only on main after tests pass)
