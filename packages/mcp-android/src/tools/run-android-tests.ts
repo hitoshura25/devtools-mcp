@@ -1,4 +1,4 @@
-import { execCommand, ToolResult, isValidPath, isValidModuleName, isValidBuildType, isValidTestFilter } from '@hitoshura25/core';
+import { execCommandSafe, ToolResult, isValidPath, isValidModuleName, isValidBuildType, isValidTestFilter } from '@hitoshura25/core';
 
 export interface RunTestsParams {
   project_path?: string;
@@ -129,17 +129,20 @@ export async function runAndroidTests(
     };
   }
 
-  // 1. Construct test command
-  let testCmd = `./gradlew :${module}:connected${buildType.charAt(0).toUpperCase() + buildType.slice(1)}AndroidTest`;
+  // 1. Construct test command using execCommandSafe to prevent shell injection
+  const capitalizedBuildType = buildType.charAt(0).toUpperCase() + buildType.slice(1);
+  const taskName = `:${module}:connected${capitalizedBuildType}AndroidTest`;
 
+  // Build args array - execCommandSafe uses execFile which bypasses shell interpretation
+  const gradleArgs = [taskName];
   if (params.test_filter) {
-    testCmd += ` --tests "${params.test_filter}"`;
+    gradleArgs.push('--tests', params.test_filter);
   }
 
   steps.push('command_constructed');
 
   // 2. Run tests
-  const testResult = await execCommand(testCmd, {
+  const testResult = await execCommandSafe('./gradlew', gradleArgs, {
     cwd: projectPath,
     timeout: 600000, // 10 minutes for tests
   });

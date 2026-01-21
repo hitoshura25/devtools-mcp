@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { execCommand, ToolResult, isValidColor, isValidPath } from '@hitoshura25/core';
+import { execCommandSafe, ToolResult, isValidColor, isValidPath } from '@hitoshura25/core';
 import { getIconContext, updateIconContext, IconWorkflowState, canTransition } from '../../state/icon-workflow.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -118,20 +118,20 @@ export async function iconGenerate(
     };
   }
 
-  // Execute generation script
+  // Execute generation script using execCommandSafe to prevent shell injection
   const scriptPath = join(SCRIPTS_DIR, 'generate-app-icons.sh');
 
-  const command = [
-    `"${scriptPath}"`,
-    `"${projectPath}"`,
-    `"${iconId}"`,
-    backgroundColor ? `"${backgroundColor}"` : '""',
+  // Pass arguments as array - execCommandSafe uses execFile which bypasses shell interpretation
+  const args = [
+    projectPath,
+    iconId,
+    backgroundColor || '',
     scale.toString(),
-    `"${foregroundColor}"`,
-  ].join(' ');
+    foregroundColor,
+  ];
 
   try {
-    const result = await execCommand(command, {
+    const result = await execCommandSafe(scriptPath, args, {
       timeout: 60000, // 1 minute for generation
       cwd: projectPath,
     });

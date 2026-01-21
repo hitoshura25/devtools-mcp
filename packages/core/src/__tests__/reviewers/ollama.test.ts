@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OllamaAdapter } from '@hitoshura25/core';
 import type { OllamaBackendConfig } from '@hitoshura25/core';
 
-// Mock child_process exec
+// Mock child_process exec and execFile
 const mockExec = vi.fn();
+const mockExecFile = vi.fn();
 vi.mock('child_process', () => ({
   exec: (cmd: string, options: unknown, callback: unknown) => mockExec(cmd, options, callback),
+  execFile: (cmd: string, args: string[], options: unknown, callback: unknown) => mockExecFile(cmd, args, options, callback),
 }));
 
 describe('OllamaAdapter', () => {
