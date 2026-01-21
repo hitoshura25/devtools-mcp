@@ -22,7 +22,10 @@ vi.mock('@hitoshura25/core', async () => {
       abort: mockAbort,
     })),
     ReviewerUnavailableError: class ReviewerUnavailableError extends Error {
-      constructor(public reviewer: string, public availability: any) {
+      constructor(
+        public reviewer: string,
+        public availability: { reason?: string; installInstructions?: string }
+      ) {
         super(`Reviewer '${reviewer}' is not available`);
         this.name = 'ReviewerUnavailableError';
       }

@@ -8,6 +8,7 @@ import {
   getReviewerRegistry,
   type ToolResult,
   type ReviewerName,
+  type WorkflowAction,
 } from '@hitoshura25/core';
 import { androidConfig } from './commands.js';
 
@@ -37,7 +38,7 @@ export interface ImplementStartResult {
   status: 'initialized' | 'error';
   workflowId?: string;
   phase?: string;
-  action?: any;
+  action?: WorkflowAction;
   nextTool?: string;
   error?: string;
   reason?: string;
@@ -126,7 +127,7 @@ export interface ImplementStepInput {
 export interface ImplementStepResult {
   status: 'step_complete' | 'workflow_complete' | 'error';
   phase?: string;
-  action?: any;
+  action?: WorkflowAction | null;
   nextTool?: string | null;
   error?: string;
 }
