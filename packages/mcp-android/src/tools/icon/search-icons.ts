@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommand, ToolResult, isValidSearchTerm } from '@hitoshura25/core';
 import {
   getIconContext,
   updateIconContext,
@@ -66,6 +66,24 @@ export async function iconSearch(
   }
 
   const limit = Math.min(params.limit || 10, 50);
+
+  // Validate search term to prevent command injection
+  if (!isValidSearchTerm(params.term)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid search term: contains unsafe characters',
+        details: 'Search term must only contain alphanumeric characters, spaces, dashes, and underscores',
+        suggestions: ['Use a search term without special characters like quotes, semicolons, or backticks'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+      data: { status: 'invalid_state' as const, error: 'Invalid search term' },
+    };
+  }
+
   steps.push('parameters_validated');
 
   // Execute search script

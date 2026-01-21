@@ -1,4 +1,4 @@
-import { execCommand, parseGradleError, ToolResult, detectAndroidProject } from '@hitoshura25/core';
+import { execCommand, parseGradleError, ToolResult, detectAndroidProject, isValidPath, isValidModuleName, isValidBuildType } from '@hitoshura25/core';
 import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 
@@ -43,6 +43,52 @@ export async function validateReleaseBuild(
   const projectPath = params.project_path || '.';
   const module = params.module || 'app';
   const buildType = params.build_type || 'release';
+
+  // Validate inputs to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: false,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (!isValidModuleName(module)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid module name: contains unsafe characters',
+        details: 'Module name must only contain alphanumeric characters, dashes, and underscores',
+        suggestions: ['Use a module name like "app" or "core-library"'],
+        recoverable: false,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (!isValidBuildType(buildType)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid build type: must be "debug" or "release"',
+        details: `Received: ${buildType}`,
+        suggestions: ['Use build_type: "debug" or build_type: "release"'],
+        recoverable: false,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
 
   // 1. Verify project structure
   console.log(`[validateReleaseBuild] Detecting Android project at ${projectPath}...`);

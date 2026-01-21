@@ -129,7 +129,9 @@ OLLAMA_JSON_EOF`;
       const response = JSON.parse(output);
       const content = response.choices?.[0]?.message?.content || output;
 
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Use non-greedy match and limit input length to prevent ReDoS
+      const truncatedContent = content.length > 100000 ? content.slice(0, 100000) : content;
+      const jsonMatch = truncatedContent.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return {

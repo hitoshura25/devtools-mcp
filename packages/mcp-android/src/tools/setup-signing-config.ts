@@ -1,4 +1,4 @@
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommand, ToolResult, isValidPath, isValidShellArg } from '@hitoshura25/core';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
@@ -34,6 +34,37 @@ export async function setupSigningConfig(
   const projectPath = params.project_path || '.';
   const strategy = params.strategy || 'dual';
   const password = params.keystore_password || generatePassword();
+
+  // Validate inputs to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (params.keystore_password && !isValidShellArg(params.keystore_password)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid keystore password: contains unsafe characters',
+        details: 'Password must only contain alphanumeric characters and basic symbols',
+        suggestions: ['Use a password without shell special characters like backticks, semicolons, or quotes'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
 
   // 1. Create keystores directory
   const keystoresDir = join(projectPath, 'keystores');

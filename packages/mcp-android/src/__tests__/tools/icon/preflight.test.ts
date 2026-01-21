@@ -9,6 +9,8 @@ describe('icon_preflight_check', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     resetIconContext();
+    // Mock validation functions to return true
+    vi.mocked(core.isValidPath).mockReturnValue(true);
   });
 
   afterEach(() => {

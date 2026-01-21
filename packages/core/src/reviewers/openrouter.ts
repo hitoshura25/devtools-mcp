@@ -117,7 +117,9 @@ OPENROUTER_JSON_EOF`;
         };
       } catch {
         // Response is not JSON, try to find JSON within the text
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        // Use non-greedy match and limit input length to prevent ReDoS
+        const truncatedContent = content.length > 100000 ? content.slice(0, 100000) : content;
+        const jsonMatch = truncatedContent.match(/\{[\s\S]*?\}/);
         if (jsonMatch) {
           const reviewData = JSON.parse(jsonMatch[0]);
           return {

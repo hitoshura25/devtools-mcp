@@ -107,7 +107,9 @@ export function parseGradleError(stderr: string): ParsedError {
 }
 
 export function parseTestFailure(output: string): ParsedError {
-  const failureMatch = output.match(/([^#\s]+)#([^\s]+)/);
+  // Use atomic groups via possessive-like pattern to prevent ReDoS
+  // Match class#method pattern with bounded character classes
+  const failureMatch = output.match(/([a-zA-Z0-9_.$]+)#([a-zA-Z0-9_]+)/);
 
   return {
     type: 'test_failure',
