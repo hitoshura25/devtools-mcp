@@ -151,3 +151,7 @@ vite.config.ts.timestamp-*
 **/__tests__/**/test-output/
 **/__tests__/**/fixtures/
 *.keystore
+
+# CodeQL security scanning
+codeql-db/
+codeql-results.sarif
