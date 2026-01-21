@@ -22,20 +22,23 @@ import type {
  */
 function findDevtoolsDir(startPath: string): string | null {
   let currentPath = resolve(startPath);
+  let parentPath = dirname(currentPath);
 
   // Walk up the directory tree until we hit the filesystem root
-  while (true) {
+  while (currentPath !== parentPath) {
     const devtoolsPath = join(currentPath, '.devtools');
     if (existsSync(devtoolsPath)) {
       return currentPath;
     }
 
-    const parentPath = dirname(currentPath);
-    if (parentPath === currentPath) {
-      // Reached filesystem root
-      break;
-    }
     currentPath = parentPath;
+    parentPath = dirname(currentPath);
+  }
+
+  // Check the root directory as well
+  const devtoolsPath = join(currentPath, '.devtools');
+  if (existsSync(devtoolsPath)) {
+    return currentPath;
   }
 
   return null;

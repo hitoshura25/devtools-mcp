@@ -27,10 +27,10 @@ vi.mock('@hitoshura25/core', async () => {
         this.name = 'ReviewerUnavailableError';
       }
     },
-    reviewerRegistry: {
+    getReviewerRegistry: vi.fn().mockReturnValue({
       checkAvailability: vi.fn(),
       get: vi.fn(),
-    },
+    }),
   };
 });
 

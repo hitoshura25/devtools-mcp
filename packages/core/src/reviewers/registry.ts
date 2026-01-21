@@ -152,7 +152,22 @@ export class ReviewerRegistry {
 }
 
 /**
- * Singleton reviewer registry instance
+ * Lazy-loaded singleton reviewer registry instance
  * Uses default configuration from environment/file
+ * Only instantiated when first accessed (avoids failures during module import in tests)
  */
-export const reviewerRegistry = new ReviewerRegistry();
+let _reviewerRegistry: ReviewerRegistry | null = null;
+
+export function getReviewerRegistry(): ReviewerRegistry {
+  if (!_reviewerRegistry) {
+    _reviewerRegistry = new ReviewerRegistry();
+  }
+  return _reviewerRegistry;
+}
+
+/**
+ * Reset the singleton (useful for testing)
+ */
+export function resetReviewerRegistry(): void {
+  _reviewerRegistry = null;
+}

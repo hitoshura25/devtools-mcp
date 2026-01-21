@@ -5,14 +5,21 @@
 import {
   ImplementOrchestrator,
   ReviewerUnavailableError,
-  reviewerRegistry,
+  getReviewerRegistry,
   type ToolResult,
   type ReviewerName,
 } from '@hitoshura25/core';
 import { androidConfig } from './commands.js';
 
-// Singleton orchestrator for this MCP server
-const orchestrator = new ImplementOrchestrator(androidConfig, reviewerRegistry);
+// Lazy-loaded singleton orchestrator for this MCP server
+let _orchestrator: ImplementOrchestrator | null = null;
+
+function getOrchestrator(): ImplementOrchestrator {
+  if (!_orchestrator) {
+    _orchestrator = new ImplementOrchestrator(androidConfig, getReviewerRegistry());
+  }
+  return _orchestrator;
+}
 
 /**
  * Input parameters for implement_start tool
@@ -48,7 +55,7 @@ export async function implementStart(
 
   try {
     steps.push('checking_reviewers');
-    const result = await orchestrator.start({
+    const result = await getOrchestrator().start({
       description: input.description,
       projectPath: input.project_path ?? '.',
       reviewers: input.reviewers,
@@ -135,7 +142,7 @@ export async function implementStep(
 
   try {
     steps.push('processing_step');
-    const result = await orchestrator.step(input.workflow_id, input.step_result);
+    const result = await getOrchestrator().step(input.workflow_id, input.step_result);
 
     if (result.complete) {
       steps.push('workflow_completed');
@@ -213,7 +220,7 @@ export async function implementStatus(
   try {
     if (input.workflow_id) {
       steps.push('fetching_workflow_status');
-      const context = await orchestrator.getStatus(input.workflow_id);
+      const context = await getOrchestrator().getStatus(input.workflow_id);
 
       if (!context) {
         return {
@@ -245,7 +252,7 @@ export async function implementStatus(
     }
 
     steps.push('listing_active_workflows');
-    const activeIds = await orchestrator.listActive();
+    const activeIds = await getOrchestrator().listActive();
 
     return {
       success: true,
@@ -298,7 +305,7 @@ export async function implementAbort(
 
   try {
     steps.push('aborting_workflow');
-    await orchestrator.abort(input.workflow_id, input.reason);
+    await getOrchestrator().abort(input.workflow_id, input.reason);
 
     steps.push('workflow_aborted');
     return {

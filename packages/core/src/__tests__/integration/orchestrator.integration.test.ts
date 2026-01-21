@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImplementOrchestrator, reviewerRegistry, loadReviewerConfigSync } from '@hitoshura25/core';
+import { ImplementOrchestrator, getReviewerRegistry, loadReviewerConfigSync } from '@hitoshura25/core';
 import type { LanguageConfig, ReviewerConfig } from '@hitoshura25/core';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { exec, execSync } from 'child_process';
@@ -279,7 +279,7 @@ describeIntegration('ImplementOrchestrator - Real AI Review Integration', () => 
       await mkdir('src/__tests__/integration/test-output/test-specs', { recursive: true });
     }
 
-    orchestrator = new ImplementOrchestrator(testLanguageConfig, reviewerRegistry);
+    orchestrator = new ImplementOrchestrator(testLanguageConfig, getReviewerRegistry());
 
     if (VERBOSE) {
       console.log('\n' +
