@@ -54,7 +54,11 @@ function loadEnvOverrides(): Partial<ReviewerConfig> {
   // Load active reviewers list override
   const activeReviewersEnv = process.env.ACTIVE_REVIEWERS;
   if (activeReviewersEnv) {
-    overrides.activeReviewers = activeReviewersEnv.split(',').map(r => r.trim());
+    // Filter out empty strings to handle edge cases like ACTIVE_REVIEWERS=""
+    overrides.activeReviewers = activeReviewersEnv
+      .split(',')
+      .map(r => r.trim())
+      .filter(r => r.length > 0);
   }
 
   return overrides;
@@ -122,7 +126,16 @@ async function loadFromFile(projectPath: string): Promise<ReviewerConfig> {
         `${error.message}`
       );
     }
-    throw error;
+    // Provide helpful context for file system errors and other errors
+    if (error instanceof Error && error.message.includes(configPath)) {
+      // Error already has config path context, rethrow as-is
+      throw error;
+    }
+    // Add context to other errors (e.g., permission denied, etc.)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Failed to load reviewer config at ${configPath}: ${errorMessage}`
+    );
   }
 }
 
@@ -188,7 +201,16 @@ function loadFromFileSync(projectPath: string): ReviewerConfig {
         `${error.message}`
       );
     }
-    throw error;
+    // Provide helpful context for file system errors and other errors
+    if (error instanceof Error && error.message.includes(configPath)) {
+      // Error already has config path context, rethrow as-is
+      throw error;
+    }
+    // Add context to other errors (e.g., permission denied, etc.)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Failed to load reviewer config at ${configPath}: ${errorMessage}`
+    );
   }
 }
 

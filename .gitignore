@@ -155,3 +155,5 @@ vite.config.ts.timestamp-*
 # CodeQL security scanning
 codeql-db/
 codeql-results.sarif
+.env
+.mcp.json

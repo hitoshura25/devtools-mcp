@@ -83,9 +83,9 @@ export async function implementStart(
         error: {
           code: 'REVIEWER_UNAVAILABLE',
           message: `Reviewer '${error.reviewer}' is not available`,
-          details: error.availability.reason,
+          details: error.sanitizedReason,
           suggestions: [
-            error.availability.installInstructions || 'Install the required reviewer',
+            error.installInstructions || 'Install the required reviewer',
           ],
           recoverable: true,
         },

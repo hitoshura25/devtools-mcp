@@ -22,12 +22,17 @@ vi.mock('@hitoshura25/core', async () => {
       abort: mockAbort,
     })),
     ReviewerUnavailableError: class ReviewerUnavailableError extends Error {
+      public sanitizedReason: string;
+      public installInstructions?: string;
+
       constructor(
         public reviewer: string,
-        public availability: { reason?: string; installInstructions?: string }
+        availability: { reason?: string; installInstructions?: string }
       ) {
         super(`Reviewer '${reviewer}' is not available`);
         this.name = 'ReviewerUnavailableError';
+        this.sanitizedReason = availability.reason ?? 'Service unavailable';
+        this.installInstructions = availability.installInstructions;
       }
     },
     getReviewerRegistry: vi.fn().mockReturnValue({

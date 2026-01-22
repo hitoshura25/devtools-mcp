@@ -75,6 +75,7 @@ export type WorkflowActionType =
   | 'edit_file'
   | 'create_files'
   | 'shell'
+  | 'info'
   | 'complete'
   | 'failed';
 

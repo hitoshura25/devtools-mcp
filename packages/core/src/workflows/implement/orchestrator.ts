@@ -20,14 +20,49 @@ import type {
 
 /**
  * Error thrown when a reviewer is unavailable
+ * Note: Error messages are sanitized to avoid leaking sensitive system information
  */
 export class ReviewerUnavailableError extends Error {
+  /** Sanitized reason for unavailability (safe for end users) */
+  public sanitizedReason: string;
+  /** Installation instructions (if available) */
+  public installInstructions?: string;
+
   constructor(
     public reviewer: string,
-    public availability: { reason?: string; installInstructions?: string }
+    availability: { reason?: string; installInstructions?: string }
   ) {
-    super(`Reviewer '${reviewer}' is not available: ${availability.reason}`);
+    // Sanitize the reason to avoid leaking sensitive paths or network details
+    const sanitizedReason = ReviewerUnavailableError.sanitizeReason(availability.reason);
+    super(`Reviewer '${reviewer}' is not available: ${sanitizedReason}`);
     this.name = 'ReviewerUnavailableError';
+    this.sanitizedReason = sanitizedReason;
+    this.installInstructions = availability.installInstructions;
+  }
+
+  /**
+   * Sanitize error reason to remove potentially sensitive information
+   * like file paths, network addresses, or internal details
+   */
+  private static sanitizeReason(reason?: string): string {
+    if (!reason) return 'Service unavailable';
+
+    // Truncate to prevent ReDoS on very long inputs
+    const truncated = reason.length > 1000 ? reason.slice(0, 1000) : reason;
+
+    // Remove file paths - use simpler patterns to avoid ReDoS from nested quantifiers
+    // Unix paths: match /word sequences (bounded to avoid backtracking)
+    let sanitized = truncated.replace(/\/[a-zA-Z0-9_.-]{1,100}(?:\/[a-zA-Z0-9_.-]{1,100})*/g, '[path]');
+    // Windows paths: match drive:\path sequences (hyphen at end of char class doesn't need escaping)
+    sanitized = sanitized.replace(/[A-Z]:\\[a-zA-Z0-9_.\\-]{1,200}/gi, '[path]');
+
+    // Remove IP addresses and ports
+    sanitized = sanitized.replace(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?/g, '[address]');
+
+    // Keep URLs but remove query strings which may contain sensitive data
+    sanitized = sanitized.replace(/(\bhttps?:\/\/[^\s?]+)\?[^\s]*/gi, '$1');
+
+    return sanitized;
   }
 }
 
@@ -175,10 +210,10 @@ export class ImplementOrchestrator {
       case ImplementPhase.SPEC_CREATED:
         // Start review queue if we have reviewers
         if (context.pendingReviewers.length === 0) {
-          // No reviewers configured, skip to refinement
+          // No reviewers configured, skip directly to tests (no refine step needed)
           return {
             nextPhase: ImplementPhase.SPEC_REFINED,
-            action: this.getRefineSpecAction(context),
+            action: this.getNoReviewsAction(context),
           };
         }
         return {
@@ -380,6 +415,17 @@ export class ImplementOrchestrator {
     };
   }
 
+  /**
+   * Action when no reviewers are configured - skip refinement entirely
+   */
+  private getNoReviewsAction(context: ImplementWorkflowContext): WorkflowAction {
+    return {
+      type: 'info',
+      instruction: `No AI reviewers configured. Proceeding directly to test creation. ` +
+        `Spec file: ${context.specPath}`,
+    };
+  }
+
   private getCreateTestsAction(context: ImplementWorkflowContext): WorkflowAction {
     return {
       type: 'create_files',
@@ -409,7 +455,7 @@ export class ImplementOrchestrator {
     };
   }
 
-  private getFailureAction(context: ImplementWorkflowContext, step: string): WorkflowAction {
+  private getFailureAction(_context: ImplementWorkflowContext, step: string): WorkflowAction {
     return {
       type: 'failed',
       instruction: `${step} failed. Review the output and fix the issues, then call implement_step again.`,
@@ -427,12 +473,16 @@ export class ImplementOrchestrator {
       const review = context.reviews[reviewerName];
       if (!review) continue;
 
-      parts.push(`**${reviewerName} Review** (${review.backendType}/${review.model}):`);
+      // Add fallback handling for older stored workflows that may not have these fields
+      const backendInfo = review.backendType && review.model
+        ? ` (${review.backendType}/${review.model})`
+        : '';
+      parts.push(`**${reviewerName} Review**${backendInfo}:`);
       parts.push(`- Feedback: ${review.feedback}`);
-      if (review.suggestions.length > 0) {
+      if (review.suggestions && review.suggestions.length > 0) {
         parts.push(`- Suggestions: ${review.suggestions.join(', ')}`);
       }
-      if (review.concerns.length > 0) {
+      if (review.concerns && review.concerns.length > 0) {
         parts.push(`- Concerns: ${review.concerns.join(', ')}`);
       }
       parts.push('');
