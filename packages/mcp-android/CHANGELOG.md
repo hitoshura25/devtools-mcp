@@ -1,5 +1,16 @@
 # @hitoshura25/mcp-android
 
+## 0.2.0
+
+### Minor Changes
+
+- 7ebab3a: Add implementation workflow orchestrator with AI reviewer integration. Core package adds shared workflow engine with state machine, file-based persistence, and Gemini/OLMo reviewer adapters. MCP-Android adds implement tools (implement_start, implement_step, implement_status, implement_abort) for guided feature development workflows with spec creation, AI review, TDD implementation, and automated verification gates.
+
+### Patch Changes
+
+- Updated dependencies [7ebab3a]
+  - @hitoshura25/core@0.2.0
+
 ## 0.1.7
 
 ### Patch Changes
