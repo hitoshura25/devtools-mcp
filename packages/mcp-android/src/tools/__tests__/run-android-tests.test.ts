@@ -6,7 +6,7 @@ vi.mock('@hitoshura25/core', async () => {
   const actual = await vi.importActual('@hitoshura25/core');
   return {
     ...actual,
-    execCommand: vi.fn(),
+    execCommandSafe: vi.fn(),
   };
 });
 
@@ -16,7 +16,7 @@ describe('runAndroidTests', () => {
   });
 
   it('should run tests successfully', async () => {
-    vi.mocked(core.execCommand).mockResolvedValue({
+    vi.mocked(core.execCommandSafe).mockResolvedValue({
       exitCode: 0,
       stdout: `
         10 tests completed
@@ -41,7 +41,7 @@ describe('runAndroidTests', () => {
   });
 
   it('should handle test failures', async () => {
-    vi.mocked(core.execCommand).mockResolvedValue({
+    vi.mocked(core.execCommandSafe).mockResolvedValue({
       exitCode: 1,
       stdout: `
         com.example.LoginTest#testInvalidCredentials FAILED
@@ -66,7 +66,7 @@ describe('runAndroidTests', () => {
   });
 
   it('should support test filtering', async () => {
-    vi.mocked(core.execCommand).mockResolvedValue({
+    vi.mocked(core.execCommandSafe).mockResolvedValue({
       exitCode: 0,
       stdout: '1 tests completed',
       stderr: '',
@@ -79,14 +79,16 @@ describe('runAndroidTests', () => {
       test_filter: 'com.example.LoginTest',
     });
 
-    expect(core.execCommand).toHaveBeenCalledWith(
-      expect.stringContaining('--tests "com.example.LoginTest"'),
+    // execCommandSafe takes (command, args[], options)
+    expect(core.execCommandSafe).toHaveBeenCalledWith(
+      './gradlew',
+      expect.arrayContaining(['--tests', 'com.example.LoginTest']),
       expect.any(Object)
     );
   });
 
   it('should parse test results from output', async () => {
-    vi.mocked(core.execCommand).mockResolvedValue({
+    vi.mocked(core.execCommandSafe).mockResolvedValue({
       exitCode: 0,
       stdout: `
         Starting tests

@@ -16,7 +16,7 @@
     "test:integration": {
       "dependsOn": ["build"],
       "outputs": [],
-      "env": ["ANDROID_HOME", "ANDROID_SDK_ROOT"]
+      "env": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "ACTIVE_REVIEWERS", "OPENROUTER_API_KEY"]
     },
     "lint": {
       "outputs": []

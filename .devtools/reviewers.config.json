@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Reviewer configuration for devtools-mcp implement workflow",
+
+  "activeReviewers": ["olmo-local", "gemini-local"],
+
+  "reviewers": {
+    "olmo-local": {
+      "type": "ollama",
+      "model": "olmo-3.1:32b-think",
+      "baseUrl": "http://localhost:11434"
+    },
+    "gemini-local": {
+      "type": "ollama",
+      "model": "gemini-3-flash-preview:latest",
+      "baseUrl": "http://localhost:11434"
+    },
+    "olmo-openrouter": {
+      "type": "openrouter",
+      "model": "allenai/olmo-3.1-32b-think",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "temperature": 0.3
+    },
+    "phi4-github": {
+      "type": "github-models",
+      "model": "phi-4",
+      "endpoint": "https://models.inference.ai.azure.com",
+      "temperature": 0.3
+    },
+    "gemma-openrouter": {
+      "type": "openrouter",
+      "model": "google/gemma-3-27b-it:free",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "temperature": 0.3
+    },
+    "nemotron-openrouter": {
+      "type": "openrouter",
+      "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "temperature": 0.3
+    },
+    "mistral-openrouter": {
+      "type": "openrouter",
+      "model": "mistralai/devstral-2512:free",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "temperature": 0.3
+    }
+  }
+}

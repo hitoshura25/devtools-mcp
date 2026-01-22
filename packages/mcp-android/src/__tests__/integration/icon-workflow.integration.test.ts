@@ -15,6 +15,9 @@ describe('Icon Workflow Integration', () => {
   beforeEach(() => {
     resetIconContext();
     vi.resetAllMocks();
+    // Mock validation functions to return true
+    vi.mocked(core.isValidPath).mockReturnValue(true);
+    vi.mocked(core.isValidSearchTerm).mockReturnValue(true);
   });
 
   it('enforces workflow order - cannot skip preflight', async () => {

@@ -63,6 +63,9 @@ jobs:
         run: pnpm test:integration
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          # CI uses free models via openrouter
+          ACTIVE_REVIEWERS: gemma-openrouter, nemotron-openrouter
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
   # Create Version Packages PR or Publish to npm (only on main after tests pass)
   release:

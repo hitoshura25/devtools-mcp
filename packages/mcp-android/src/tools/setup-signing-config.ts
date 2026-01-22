@@ -1,4 +1,4 @@
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommandSafe, ToolResult, isValidPath, isValidShellArg } from '@hitoshura25/core';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
@@ -35,6 +35,37 @@ export async function setupSigningConfig(
   const strategy = params.strategy || 'dual';
   const password = params.keystore_password || generatePassword();
 
+  // Validate inputs to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (params.keystore_password && !isValidShellArg(params.keystore_password)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid keystore password: contains unsafe characters',
+        details: 'Password must only contain alphanumeric characters and basic symbols',
+        suggestions: ['Use a password without shell special characters like backticks, semicolons, or quotes'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
   // 1. Create keystores directory
   const keystoresDir = join(projectPath, 'keystores');
   if (!existsSync(keystoresDir)) {
@@ -42,16 +73,28 @@ export async function setupSigningConfig(
   }
   steps.push('keystores_dir_created');
 
-  // 2. Generate production keystore
+  // 2. Generate production keystore using execCommandSafe to prevent shell injection
   const productionKeystore: KeystoreInfo = {
     path: join(keystoresDir, 'production-release.jks'),
     password: password,
     alias: 'production-key',
   };
 
-  const prodKeystoreCmd = `keytool -genkeypair -v -keystore "${productionKeystore.path}" -alias ${productionKeystore.alias} -keyalg RSA -keysize 2048 -validity 10000 -storepass ${productionKeystore.password} -keypass ${productionKeystore.password} -dname "CN=Production, OU=Android, O=Company, L=City, S=State, C=US"`;
+  // Use execCommandSafe with array arguments - bypasses shell interpretation
+  const prodKeystoreArgs = [
+    '-genkeypair',
+    '-v',
+    '-keystore', productionKeystore.path,
+    '-alias', productionKeystore.alias,
+    '-keyalg', 'RSA',
+    '-keysize', '2048',
+    '-validity', '10000',
+    '-storepass', productionKeystore.password,
+    '-keypass', productionKeystore.password,
+    '-dname', 'CN=Production, OU=Android, O=Company, L=City, S=State, C=US',
+  ];
 
-  const prodResult = await execCommand(prodKeystoreCmd, {
+  const prodResult = await execCommandSafe('keytool', prodKeystoreArgs, {
     cwd: projectPath,
     timeout: 30000,
   });
@@ -87,9 +130,21 @@ export async function setupSigningConfig(
       alias: 'local-dev-key',
     };
 
-    const devKeystoreCmd = `keytool -genkeypair -v -keystore "${localDevKeystore.path}" -alias ${localDevKeystore.alias} -keyalg RSA -keysize 2048 -validity 10000 -storepass ${localDevKeystore.password} -keypass ${localDevKeystore.password} -dname "CN=Dev, OU=Android, O=Company, L=City, S=State, C=US"`;
+    // Use execCommandSafe with array arguments - bypasses shell interpretation
+    const devKeystoreArgs = [
+      '-genkeypair',
+      '-v',
+      '-keystore', localDevKeystore.path,
+      '-alias', localDevKeystore.alias,
+      '-keyalg', 'RSA',
+      '-keysize', '2048',
+      '-validity', '10000',
+      '-storepass', localDevKeystore.password,
+      '-keypass', localDevKeystore.password,
+      '-dname', 'CN=Dev, OU=Android, O=Company, L=City, S=State, C=US',
+    ];
 
-    const devResult = await execCommand(devKeystoreCmd, {
+    const devResult = await execCommandSafe('keytool', devKeystoreArgs, {
       cwd: projectPath,
       timeout: 30000,
     });

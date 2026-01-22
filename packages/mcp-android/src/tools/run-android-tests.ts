@@ -1,4 +1,4 @@
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommandSafe, ToolResult, isValidPath, isValidModuleName, isValidBuildType, isValidTestFilter } from '@hitoshura25/core';
 
 export interface RunTestsParams {
   project_path?: string;
@@ -68,17 +68,81 @@ export async function runAndroidTests(
   const module = params.module || 'app';
   const buildType = params.build_type || 'debug';
 
-  // 1. Construct test command
-  let testCmd = `./gradlew :${module}:connected${buildType.charAt(0).toUpperCase() + buildType.slice(1)}AndroidTest`;
+  // Validate inputs to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
 
+  if (!isValidModuleName(module)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid module name: contains unsafe characters',
+        details: 'Module name must only contain alphanumeric characters, dashes, and underscores',
+        suggestions: ['Use a module name like "app" or "core-library"'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (!isValidBuildType(buildType)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid build type: must be "debug" or "release"',
+        details: `Received: ${buildType}`,
+        suggestions: ['Use build_type: "debug" or build_type: "release"'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  if (params.test_filter && !isValidTestFilter(params.test_filter)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid test filter: contains unsafe characters',
+        details: 'Test filter must only contain alphanumeric characters, dots, asterisks, dashes, and underscores',
+        suggestions: ['Use a test filter like "com.example.*" or "MyTestClass"'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+    };
+  }
+
+  // 1. Construct test command using execCommandSafe to prevent shell injection
+  const capitalizedBuildType = buildType.charAt(0).toUpperCase() + buildType.slice(1);
+  const taskName = `:${module}:connected${capitalizedBuildType}AndroidTest`;
+
+  // Build args array - execCommandSafe uses execFile which bypasses shell interpretation
+  const gradleArgs = [taskName];
   if (params.test_filter) {
-    testCmd += ` --tests "${params.test_filter}"`;
+    gradleArgs.push('--tests', params.test_filter);
   }
 
   steps.push('command_constructed');
 
   // 2. Run tests
-  const testResult = await execCommand(testCmd, {
+  const testResult = await execCommandSafe('./gradlew', gradleArgs, {
     cwd: projectPath,
     timeout: 600000, // 10 minutes for tests
   });

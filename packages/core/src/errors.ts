@@ -107,7 +107,11 @@ export function parseGradleError(stderr: string): ParsedError {
 }
 
 export function parseTestFailure(output: string): ParsedError {
-  const failureMatch = output.match(/([^#\s]+)#([^\s]+)/);
+  // Use length-limited pattern to prevent ReDoS
+  // Match class#method pattern with bounded repetition (max 500 chars for class, 100 for method)
+  // Truncate input to prevent excessive backtracking
+  const truncatedOutput = output.length > 10000 ? output.slice(0, 10000) : output;
+  const failureMatch = truncatedOutput.match(/([a-zA-Z0-9_.]{1,500})#([a-zA-Z0-9_]{1,100})/);
 
   return {
     type: 'test_failure',

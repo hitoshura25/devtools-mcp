@@ -2,18 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { execCommand, execWithRetry } from '../executor.js';
 
 // Create mock functions using hoisted scope
-const { mockExec } = vi.hoisted(() => ({
+const { mockExec, mockExecFile } = vi.hoisted(() => ({
   mockExec: vi.fn(),
+  mockExecFile: vi.fn(),
 }));
 
 // Mock child_process
 vi.mock('child_process', () => ({
   exec: mockExec,
+  execFile: mockExecFile,
 }));
 
-// Mock promisify to return our mocked exec
+// Mock promisify to return appropriate mock based on the function
 vi.mock('util', () => ({
-  promisify: () => mockExec,
+  promisify: (fn: unknown) => (fn === mockExec ? mockExec : mockExecFile),
 }));
 
 describe('execCommand', () => {

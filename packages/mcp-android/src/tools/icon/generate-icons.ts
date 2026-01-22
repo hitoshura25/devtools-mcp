@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommandSafe, ToolResult, isValidColor, isValidPath } from '@hitoshura25/core';
 import { getIconContext, updateIconContext, IconWorkflowState, canTransition } from '../../state/icon-workflow.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,25 +64,74 @@ export async function iconGenerate(
 
   steps.push('state_validated');
 
-  // Prepare generation parameters
+  // Prepare generation parameters with validation
   const backgroundColor = params.background_color || '';
   const scale = params.scale || 1.15;
   const foregroundColor = params.foreground_color || 'white';
 
-  // Execute generation script
+  // Validate inputs to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+      data: { status: 'invalid_state', error: 'Invalid project path' },
+    };
+  }
+
+  if (backgroundColor && !isValidColor(backgroundColor)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid background color: must be a hex color (#RGB or #RRGGBB) or a color name',
+        details: `Received: ${backgroundColor}`,
+        suggestions: ['Use a hex color like #4CAF50 or a color name like "green"'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+      data: { status: 'invalid_state', error: 'Invalid background color' },
+    };
+  }
+
+  if (!isValidColor(foregroundColor)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid foreground color: must be a hex color (#RGB or #RRGGBB) or a color name',
+        details: `Received: ${foregroundColor}`,
+        suggestions: ['Use a hex color like #FFFFFF or a color name like "white"'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+      data: { status: 'invalid_state', error: 'Invalid foreground color' },
+    };
+  }
+
+  // Execute generation script using execCommandSafe to prevent shell injection
   const scriptPath = join(SCRIPTS_DIR, 'generate-app-icons.sh');
 
-  const command = [
-    `"${scriptPath}"`,
-    `"${projectPath}"`,
-    `"${iconId}"`,
-    backgroundColor ? `"${backgroundColor}"` : '""',
+  // Pass arguments as array - execCommandSafe uses execFile which bypasses shell interpretation
+  const args = [
+    projectPath,
+    iconId,
+    backgroundColor || '',
     scale.toString(),
-    `"${foregroundColor}"`,
-  ].join(' ');
+    foregroundColor,
+  ];
 
   try {
-    const result = await execCommand(command, {
+    const result = await execCommandSafe(scriptPath, args, {
       timeout: 60000, // 1 minute for generation
       cwd: projectPath,
     });

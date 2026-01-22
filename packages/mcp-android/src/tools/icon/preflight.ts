@@ -1,4 +1,4 @@
-import { execCommand, ToolResult } from '@hitoshura25/core';
+import { execCommand, ToolResult, isValidPath } from '@hitoshura25/core';
 import { getIconContext, updateIconContext, IconWorkflowState, canTransition } from '../../state/icon-workflow.js';
 
 export interface PreflightCheckParams {
@@ -92,6 +92,24 @@ export async function iconPreflightCheck(
   }
 
   const projectPath = params.project_path || '.';
+
+  // Validate project path to prevent command injection
+  if (!isValidPath(projectPath)) {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid project path: contains unsafe characters',
+        details: 'Project path must only contain alphanumeric characters, dots, dashes, underscores, and forward slashes',
+        suggestions: ['Use a path without special characters'],
+        recoverable: true,
+      },
+      duration_ms: Date.now() - startTime,
+      steps_completed: steps,
+      data: { status: 'invalid_state' as const, error: 'Invalid project path' },
+    };
+  }
+
   steps.push('parameters_validated');
 
   // Check dependencies

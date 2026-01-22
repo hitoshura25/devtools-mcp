@@ -12,7 +12,8 @@
     "clean": "turbo run clean",
     "dev": "turbo run dev",
     "release": "pnpm publish -r --provenance",
-    "prepare": "husky"
+    "prepare": "husky",
+    "security:scan": "./scripts/security-scan.sh"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
